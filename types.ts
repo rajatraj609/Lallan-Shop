@@ -13,6 +13,7 @@ export interface User {
   dob?: string;
   phone?: string;
   phoneCode?: string;
+  profileImage?: string; // Base64 encoded image
 }
 
 export interface Product {

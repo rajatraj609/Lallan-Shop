@@ -8,14 +8,24 @@ interface Props {
 }
 
 const Auth: React.FC<Props> = ({ onLogin }) => {
+  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [isLogin, setIsLogin] = useState(true);
-  const [role, setRole] = useState<UserRole>(UserRole.MANUFACTURER);
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [isPasswordValid, setIsPasswordValid] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  const handleRoleSelect = (role: UserRole) => {
+    setSelectedRole(role);
+    setError('');
+    setSuccessMsg('');
+    setIsLogin(true); // Default to login when selecting a portal
+    setEmail('');
+    setPassword('');
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,6 +35,12 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
     if (isLogin) {
       const user = findUserByEmail(email);
       if (user && user.password === password) {
+        // Enforce that the user logs in through the correct portal
+        if (selectedRole && user.role !== selectedRole) {
+            setError(`Account found, but it is registered as ${user.role}. Please switch portals.`);
+            return;
+        }
+
         login(user);
         onLogin(user);
       } else {
@@ -44,7 +60,7 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
         id: generateId(),
         email,
         password,
-        role,
+        role: selectedRole!, // We know selectedRole is set here
         name
       };
 
@@ -82,99 +98,146 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
            </div>
         </div>
 
-        {/* Right: Form Side */}
+        {/* Right: Interaction Side */}
         <div className="p-8 md:p-12 flex flex-col justify-center bg-black/40">
-          <div className="flex justify-between items-center mb-8">
-            <h2 className="text-2xl font-display font-semibold text-white">
-              {isLogin ? 'Welcome Back' : 'Join the Atelier'}
-            </h2>
-            <div className="flex bg-neutral-900 rounded-full p-1 border border-white/10">
-              <button
-                onClick={() => { setIsLogin(true); setError(''); setSuccessMsg(''); }}
-                className={`px-4 py-1.5 text-xs font-medium rounded-full transition-all duration-300 ${isLogin ? 'bg-white text-black' : 'text-neutral-400 hover:text-white'}`}
-              >
-                Login
-              </button>
-              <button
-                onClick={() => { setIsLogin(false); setError(''); setSuccessMsg(''); }}
-                className={`px-4 py-1.5 text-xs font-medium rounded-full transition-all duration-300 ${!isLogin ? 'bg-white text-black' : 'text-neutral-400 hover:text-white'}`}
-              >
-                Sign Up
-              </button>
-            </div>
-          </div>
+          
+          {!selectedRole ? (
+             // --- PORTAL SELECTION VIEW ---
+             <div className="animate-in slide-in-from-right-8 duration-500">
+                <h2 className="text-2xl font-display font-semibold text-white mb-2">Select Portal</h2>
+                <p className="text-neutral-500 text-sm mb-8">Choose your specialized access point.</p>
+                
+                <div className="space-y-3">
+                    <button onClick={() => handleRoleSelect(UserRole.MANUFACTURER)} className="w-full group bg-neutral-900/50 border border-white/5 hover:border-white/20 hover:bg-white/5 p-4 rounded-xl flex items-center gap-4 transition-all">
+                        <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-white group-hover:scale-110 transition-transform">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
+                            </svg>
+                        </div>
+                        <div className="text-left">
+                            <h3 className="text-white font-medium">Manufacturer</h3>
+                            <p className="text-xs text-neutral-500">Production & Distribution</p>
+                        </div>
+                    </button>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {!isLogin && (
-              <div className="space-y-4 animate-in slide-in-from-right-4 fade-in duration-300">
-                <div>
-                  <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Full Name</label>
-                  <input
-                    type="text"
-                    required
-                    className="w-full px-4 py-3 bg-neutral-900/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition placeholder-neutral-600"
-                    placeholder="Enter your name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
+                    <button onClick={() => handleRoleSelect(UserRole.SELLER)} className="w-full group bg-neutral-900/50 border border-white/5 hover:border-white/20 hover:bg-white/5 p-4 rounded-xl flex items-center gap-4 transition-all">
+                        <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-white group-hover:scale-110 transition-transform">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.615A2.993 2.993 0 009.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 002.25 1.016c.896 0 1.7-.393 2.25-1.016a3.001 3.001 0 003.75.614m-16.5 0a3.004 3.004 0 01-.621-4.72L4.318 3.44A1.5 1.5 0 015.378 3h13.243a1.5 1.5 0 011.06.44l1.19 1.189a3 3 0 01-.621 4.72m-13.5 8.65h3.75a.75.75 0 00.75-.75V13.5a.75.75 0 00-.75-.75H6.75a.75.75 0 00-.75.75v3.75c0 .415.336.75.75.75z" />
+                            </svg>
+                        </div>
+                        <div className="text-left">
+                            <h3 className="text-white font-medium">Seller</h3>
+                            <p className="text-xs text-neutral-500">Retail & Inventory</p>
+                        </div>
+                    </button>
+
+                     <button onClick={() => handleRoleSelect(UserRole.BUYER)} className="w-full group bg-neutral-900/50 border border-white/5 hover:border-white/20 hover:bg-white/5 p-4 rounded-xl flex items-center gap-4 transition-all">
+                        <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-white group-hover:scale-110 transition-transform">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                            </svg>
+                        </div>
+                        <div className="text-left">
+                            <h3 className="text-white font-medium">Buyer</h3>
+                            <p className="text-xs text-neutral-500">Shopping & Orders</p>
+                        </div>
+                    </button>
                 </div>
+             </div>
+          ) : (
+            // --- AUTH FORM VIEW ---
+            <div className="animate-in slide-in-from-right-8 duration-500">
+              
+              {/* Back Button */}
+              <button onClick={() => setSelectedRole(null)} className="flex items-center gap-2 text-xs text-neutral-500 hover:text-white mb-6 transition-colors group">
+                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 group-hover:-translate-x-1 transition-transform">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                   </svg>
+                   Switch Portal
+               </button>
+
+              <div className="flex justify-between items-center mb-6">
                 <div>
-                  <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Select Role</label>
-                  <div className="grid grid-cols-3 gap-3">
-                    {Object.values(UserRole).map((r) => (
-                      <button
-                        key={r}
-                        type="button"
-                        onClick={() => setRole(r)}
-                        className={`py-3 text-xs font-medium border rounded-xl transition-all duration-300 ${role === r ? 'bg-white text-black border-white' : 'bg-neutral-900/50 border-white/10 text-neutral-400 hover:border-white/30'}`}
-                      >
-                        {r}
-                      </button>
-                    ))}
-                  </div>
+                    <h2 className="text-2xl font-display font-semibold text-white">
+                    {isLogin ? 'Welcome Back' : 'Join Our Group'}
+                    </h2>
+                    <p className="text-xs text-neutral-500 mt-1 uppercase tracking-wider">{selectedRole} Portal</p>
+                </div>
+                <div className="flex bg-neutral-900 rounded-full p-1 border border-white/10">
+                  <button
+                    onClick={() => { setIsLogin(true); setError(''); setSuccessMsg(''); }}
+                    className={`px-4 py-1.5 text-xs font-medium rounded-full transition-all duration-300 ${isLogin ? 'bg-white text-black' : 'text-neutral-400 hover:text-white'}`}
+                  >
+                    Login
+                  </button>
+                  <button
+                    onClick={() => { setIsLogin(false); setError(''); setSuccessMsg(''); }}
+                    className={`px-4 py-1.5 text-xs font-medium rounded-full transition-all duration-300 ${!isLogin ? 'bg-white text-black' : 'text-neutral-400 hover:text-white'}`}
+                  >
+                    Sign Up
+                  </button>
                 </div>
               </div>
-            )}
 
-            <div>
-              <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Email Address</label>
-              <input
-                type="email"
-                required
-                className="w-full px-4 py-3 bg-neutral-900/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition placeholder-neutral-600"
-                placeholder="name@lallanshop.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {!isLogin && (
+                  <div className="space-y-4 animate-in slide-in-from-right-4 fade-in duration-300">
+                    <div>
+                      <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Full Name</label>
+                      <input
+                        type="text"
+                        required
+                        className="w-full px-4 py-3 bg-neutral-900/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition placeholder-neutral-600"
+                        placeholder="Enter your name"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
 
-            <div>
-              <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Password</label>
-              <input
-                type="password"
-                required
-                className="w-full px-4 py-3 bg-neutral-900/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition placeholder-neutral-600"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-              {!isLogin && (
-                <div className="mt-3">
-                   <PasswordStrength password={password} onValidationChange={setIsPasswordValid} />
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    className="w-full px-4 py-3 bg-neutral-900/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition placeholder-neutral-600"
+                    placeholder="name@lallanshop.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
                 </div>
-              )}
+
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Password</label>
+                  <input
+                    type="password"
+                    required
+                    className="w-full px-4 py-3 bg-neutral-900/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition placeholder-neutral-600"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  {!isLogin && (
+                    <div className="mt-3">
+                       <PasswordStrength password={password} onValidationChange={setIsPasswordValid} />
+                    </div>
+                  )}
+                </div>
+
+                {error && <p className="text-red-400 text-xs text-center py-2 bg-red-900/10 border border-red-500/20 rounded-lg">{error}</p>}
+                {successMsg && <p className="text-emerald-400 text-xs text-center py-2 bg-emerald-900/10 border border-emerald-500/20 rounded-lg">{successMsg}</p>}
+
+                <button
+                  type="submit"
+                  className="w-full py-4 bg-white text-black font-bold font-display rounded-xl hover:bg-neutral-200 transition-all transform active:scale-[0.99] tracking-wide"
+                >
+                  {isLogin ? `Enter ${selectedRole} Portal` : 'Create Account'}
+                </button>
+              </form>
             </div>
-
-            {error && <p className="text-red-400 text-xs text-center py-2 bg-red-900/10 border border-red-500/20 rounded-lg">{error}</p>}
-            {successMsg && <p className="text-emerald-400 text-xs text-center py-2 bg-emerald-900/10 border border-emerald-500/20 rounded-lg">{successMsg}</p>}
-
-            <button
-              type="submit"
-              className="w-full py-4 bg-white text-black font-bold font-display rounded-xl hover:bg-neutral-200 transition-all transform active:scale-[0.99] tracking-wide"
-            >
-              {isLogin ? 'Enter Portal' : 'Create Account'}
-            </button>
-          </form>
+          )}
           
           <div className="mt-8 text-center">
              <p className="text-xs text-neutral-600">By accessing Lallan Shop, you agree to our Terms of Service.</p>

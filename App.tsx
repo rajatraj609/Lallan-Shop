@@ -74,8 +74,15 @@ function App() {
                 <p className="text-sm font-medium text-white group-hover:text-neutral-300 transition-colors">{user.name}</p>
                 <p className="text-[10px] text-neutral-500 uppercase tracking-wider">Account</p>
               </div>
-              <div className="w-10 h-10 bg-neutral-900 border border-white/10 rounded-full flex items-center justify-center text-sm font-display font-bold text-white group-hover:bg-white group-hover:text-black transition-all duration-300">
-                {user.name.charAt(0).toUpperCase()}
+              
+              <div className="w-10 h-10 bg-neutral-900 border border-white/10 rounded-full flex items-center justify-center overflow-hidden group-hover:border-white transition-all duration-300">
+                {user.profileImage ? (
+                  <img src={user.profileImage} alt="User" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-sm font-display font-bold text-white group-hover:text-neutral-300">
+                    {user.name.charAt(0).toUpperCase()}
+                  </span>
+                )}
               </div>
             </button>
             <button
