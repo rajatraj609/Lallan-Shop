@@ -58,145 +58,148 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      {/* Form Section */}
-      <div className="lg:col-span-1">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 sticky top-4">
-          <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <span className="p-1.5 bg-blue-100 text-blue-600 rounded-lg">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-              </svg>
-            </span>
-            Add Stock
-          </h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Product Name</label>
-              <input
-                type="text"
-                required
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                value={formData.name}
-                onChange={e => setFormData({...formData, name: e.target.value})}
-                placeholder="e.g. Wireless Headphones"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Serial Number / Batch ID</label>
-              <input
-                type="text"
-                required
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                value={formData.serialNumber}
-                onChange={e => setFormData({...formData, serialNumber: e.target.value})}
-                placeholder="e.g. SN-2023-001"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Quantity</label>
-              <input
-                type="number"
-                min="1"
-                required
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                value={formData.quantity}
-                onChange={e => setFormData({...formData, quantity: parseInt(e.target.value)})}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Manufacturing Date</label>
-              <div className="relative">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-in fade-in slide-in-from-bottom-8 duration-700">
+      
+      {/* Creation Panel - Bento Item 1 */}
+      <div className="lg:col-span-4 bg-neutral-900/50 backdrop-blur-sm border border-white/5 rounded-3xl p-8 h-fit sticky top-24">
+        <div className="mb-8">
+          <h2 className="text-2xl font-display font-bold text-white mb-2">Production Line</h2>
+          <p className="text-neutral-500 text-sm">Register new inventory units and assign to authorized retailers.</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="space-y-1">
+            <label className="text-xs uppercase tracking-wider text-neutral-400 font-medium ml-1">Product Identity</label>
+            <input
+              type="text"
+              required
+              className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-white/40 focus:ring-0 outline-none transition"
+              value={formData.name}
+              onChange={e => setFormData({...formData, name: e.target.value})}
+              placeholder="e.g. Noir Chronograph"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs uppercase tracking-wider text-neutral-400 font-medium ml-1">Batch / Serial ID</label>
+            <input
+              type="text"
+              required
+              className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-white/40 focus:ring-0 outline-none transition font-mono text-sm"
+              value={formData.serialNumber}
+              onChange={e => setFormData({...formData, serialNumber: e.target.value})}
+              placeholder="SN-2024-X01"
+            />
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-1">
+               <label className="text-xs uppercase tracking-wider text-neutral-400 font-medium ml-1">Quantity</label>
+               <input
+                 type="number"
+                 min="1"
+                 required
+                 className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-white/40 focus:ring-0 outline-none transition"
+                 value={formData.quantity}
+                 onChange={e => setFormData({...formData, quantity: parseInt(e.target.value)})}
+               />
+             </div>
+             <div className="space-y-1">
+               <label className="text-xs uppercase tracking-wider text-neutral-400 font-medium ml-1">Mfg Date</label>
+               <input
+                 type="date"
+                 required
+                 className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-white/40 focus:ring-0 outline-none transition [color-scheme:dark]"
+                 value={formData.manufacturingDate}
+                 onChange={e => setFormData({...formData, manufacturingDate: e.target.value})}
+               />
+             </div>
+          </div>
+
+          <div className="pt-4 border-t border-white/5 space-y-4">
+             <div className="space-y-1">
+                <label className="text-xs uppercase tracking-wider text-neutral-400 font-medium ml-1">Distribution Date</label>
                 <input
                   type="date"
                   required
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none pr-10 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-0 [&::-webkit-calendar-picker-indicator]:top-0 [&::-webkit-calendar-picker-indicator]:bottom-0 [&::-webkit-calendar-picker-indicator]:w-10 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                  value={formData.manufacturingDate}
-                  onChange={e => setFormData({...formData, manufacturingDate: e.target.value})}
-                />
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none p-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Date Sent to Seller</label>
-              <div className="relative">
-                <input
-                  type="date"
-                  required
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none pr-10 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-0 [&::-webkit-calendar-picker-indicator]:top-0 [&::-webkit-calendar-picker-indicator]:bottom-0 [&::-webkit-calendar-picker-indicator]:w-10 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                  className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-white/40 focus:ring-0 outline-none transition [color-scheme:dark]"
                   value={formData.dateSentToSeller}
                   onChange={e => setFormData({...formData, dateSentToSeller: e.target.value})}
                 />
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none p-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-                  </svg>
+             </div>
+             <div className="space-y-1">
+                <label className="text-xs uppercase tracking-wider text-neutral-400 font-medium ml-1">Authorized Seller</label>
+                <div className="relative">
+                  <select
+                    required
+                    className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-white/40 focus:ring-0 outline-none transition appearance-none"
+                    value={formData.sellerId}
+                    onChange={e => setFormData({...formData, sellerId: e.target.value})}
+                  >
+                    <option value="" className="bg-neutral-900 text-neutral-500">Select Partner...</option>
+                    {sellers.map(s => (
+                      <option key={s.id} value={s.id} className="bg-neutral-900">{s.name} — {s.email}</option>
+                    ))}
+                  </select>
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Send to Seller</label>
-              <select
-                required
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                value={formData.sellerId}
-                onChange={e => setFormData({...formData, sellerId: e.target.value})}
-              >
-                <option value="">Select a Seller</option>
-                {sellers.map(s => (
-                  <option key={s.id} value={s.id}>{s.name} ({s.email})</option>
-                ))}
-              </select>
-              {sellers.length === 0 && <p className="text-xs text-orange-500 mt-1">No registered sellers found.</p>}
-            </div>
-            
-            <button type="submit" className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors">
-              Send Stock
-            </button>
-          </form>
-        </div>
+                {sellers.length === 0 && <p className="text-[10px] text-orange-400 mt-1 pl-1">No seller partners onboarded.</p>}
+             </div>
+          </div>
+          
+          <button type="submit" className="w-full py-4 bg-white text-black font-display font-bold rounded-xl hover:bg-neutral-200 transition-colors shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.2)] mt-2">
+            Dispatch Inventory
+          </button>
+        </form>
       </div>
 
-      {/* List Section */}
-      <div className="lg:col-span-2">
-        <h2 className="text-xl font-bold text-slate-800 mb-4">Stock Sent</h2>
+      {/* List Panel - Bento Item 2 */}
+      <div className="lg:col-span-8 space-y-6">
+        <div className="flex items-center justify-between bg-neutral-900/50 backdrop-blur-sm border border-white/5 rounded-3xl p-6">
+           <div>
+             <h2 className="text-xl font-display font-bold text-white">Dispatched Units</h2>
+             <p className="text-neutral-500 text-sm">Real-time tracking of manufactured goods.</p>
+           </div>
+           <div className="px-4 py-2 bg-white/5 rounded-full border border-white/5 text-xs font-mono text-white">
+             Total: {products.reduce((acc, curr) => acc + curr.quantity, 0)} Units
+           </div>
+        </div>
+
         {products.length === 0 ? (
-          <div className="bg-white p-8 rounded-xl border border-dashed border-slate-300 text-center text-slate-500">
-            No stock sent yet.
+          <div className="h-64 flex flex-col items-center justify-center border border-dashed border-white/10 rounded-3xl text-neutral-600 bg-black/20">
+            <span className="font-display text-lg mb-2">No Records Found</span>
+            <span className="text-sm">Initiate production to see data here.</span>
           </div>
         ) : (
-          <div className="space-y-4">
-            {products.map(product => (
-              <div key={product.id} className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <h3 className="text-lg font-bold text-slate-800">{product.name}</h3>
-                    <div className="flex flex-wrap items-center gap-2 mt-1">
-                       <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs font-mono rounded border border-slate-200">
-                         SN: {product.serialNumber}
-                       </span>
-                       <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-xs font-bold rounded border border-indigo-100">
-                         Qty: {product.quantity}
-                       </span>
-                       <span className="text-xs text-slate-400">•</span>
-                       <span className="text-xs text-slate-500">Mfg: {product.manufacturingDate}</span>
-                    </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {products.map((product, idx) => (
+              <div 
+                key={product.id} 
+                className="group bg-neutral-900/30 border border-white/5 hover:border-white/20 rounded-2xl p-6 transition-all duration-300 hover:bg-neutral-900/60"
+                style={{ animationDelay: `${idx * 50}ms` }}
+              >
+                <div className="flex justify-between items-start mb-4">
+                  <div className="bg-neutral-950 border border-white/5 px-3 py-1 rounded-md">
+                     <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest">SN: {product.serialNumber}</span>
                   </div>
-                  <span className="px-3 py-1 bg-green-50 text-green-700 text-xs font-medium rounded-full border border-green-100 flex items-center gap-1">
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    Sent
-                  </span>
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
                 </div>
-                <div className="text-sm bg-slate-50 p-3 rounded-lg border border-slate-100 mt-2">
-                   <p className="text-slate-500 text-xs uppercase tracking-wider mb-0.5">Assigned Seller</p>
-                   <p className="font-medium text-slate-700">{product.sellerName}</p>
-                   <p className="text-xs text-slate-400">Sent on: {product.dateSentToSeller}</p>
+                
+                <h3 className="text-lg font-display font-medium text-white mb-1 group-hover:text-neutral-200">{product.name}</h3>
+                <p className="text-neutral-500 text-sm mb-6">Assigned to <span className="text-white">{product.sellerName}</span></p>
+                
+                <div className="grid grid-cols-2 gap-2 text-xs border-t border-white/5 pt-4">
+                   <div>
+                      <p className="text-neutral-600 uppercase tracking-wider mb-0.5">Quantity</p>
+                      <p className="text-white font-mono">{product.quantity}</p>
+                   </div>
+                   <div className="text-right">
+                      <p className="text-neutral-600 uppercase tracking-wider mb-0.5">Dispatched</p>
+                      <p className="text-white font-mono">{product.dateSentToSeller}</p>
+                   </div>
                 </div>
               </div>
             ))}

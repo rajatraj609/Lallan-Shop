@@ -35,92 +35,85 @@ const ProfileModal: React.FC<Props> = ({ user, onClose, onUpdate, onLogout }) =>
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-slate-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-700">
-        <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
-          <h2 className="text-xl font-bold text-white">Edit Profile</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+      <div className="bg-neutral-900 border border-white/10 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl relative">
+        <div className="px-8 py-6 border-b border-white/5 flex justify-between items-center bg-white/5">
+          <h2 className="text-lg font-display font-bold text-white">Profile Settings</h2>
+          <button onClick={onClose} className="text-neutral-500 hover:text-white transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
         
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-8 space-y-5">
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Full Name</label>
+            <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Full Name</label>
             <input
               type="text"
               required
               disabled={isDeleting}
-              className="w-full px-3 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition placeholder-slate-400 disabled:opacity-50"
+              className="w-full px-4 py-3 bg-black/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition disabled:opacity-50"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Date of Birth</label>
-            <div className="relative">
-              <input
-                type="date"
-                disabled={isDeleting}
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition pr-10 [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-0 [&::-webkit-calendar-picker-indicator]:top-0 [&::-webkit-calendar-picker-indicator]:bottom-0 [&::-webkit-calendar-picker-indicator]:w-10 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer disabled:opacity-50"
-                value={formData.dob}
-                onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
-              />
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none p-1">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-                </svg>
-              </div>
-            </div>
+            <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Date of Birth</label>
+            <input
+              type="date"
+              disabled={isDeleting}
+              className="w-full px-4 py-3 bg-black/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition disabled:opacity-50 [color-scheme:dark]"
+              value={formData.dob}
+              onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+            />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Phone Number</label>
+            <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Contact</label>
             <div className="flex gap-2">
               <select 
                 disabled={isDeleting}
-                className="px-3 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50"
+                className="px-3 py-3 bg-black/50 border border-white/10 text-white rounded-xl focus:border-white/40 outline-none disabled:opacity-50"
                 value={formData.phoneCode}
                 onChange={(e) => setFormData({ ...formData, phoneCode: e.target.value })}
               >
-                <option value="+1">+1 (US)</option>
-                <option value="+44">+44 (UK)</option>
-                <option value="+91">+91 (IN)</option>
-                <option value="+81">+81 (JP)</option>
-                <option value="+86">+86 (CN)</option>
+                <option value="+1">+1</option>
+                <option value="+44">+44</option>
+                <option value="+91">+91</option>
+                <option value="+81">+81</option>
+                <option value="+86">+86</option>
               </select>
               <input
                 type="tel"
                 disabled={isDeleting}
                 placeholder="123 456 7890"
-                className="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition placeholder-slate-400 disabled:opacity-50"
+                className="flex-1 px-4 py-3 bg-black/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition disabled:opacity-50"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               />
             </div>
           </div>
 
-          <div className="pt-4 flex flex-col gap-3">
+          <div className="pt-6 flex flex-col gap-3">
             {isDeleting ? (
-              <div className="bg-red-900/30 border border-red-900/50 rounded-lg p-4 animate-in fade-in slide-in-from-bottom-2">
-                <p className="text-red-200 text-sm mb-3 font-medium text-center">
-                  Are you sure? This action cannot be undone.
+              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-6 animate-in fade-in slide-in-from-bottom-2">
+                <p className="text-red-200 text-sm mb-4 font-medium text-center">
+                  This action is irreversible. All data will be lost.
                 </p>
                 <div className="flex gap-3">
                   <button
                     type="button"
                     onClick={() => setIsDeleting(false)}
-                    className="flex-1 px-4 py-2 text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+                    className="flex-1 px-4 py-3 text-sm font-medium text-neutral-300 bg-neutral-800 hover:bg-neutral-700 rounded-xl transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
                     onClick={handleDeleteConfirm}
-                    className="flex-1 px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-colors"
+                    className="flex-1 px-4 py-3 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors"
                   >
                     Confirm Delete
                   </button>
@@ -130,14 +123,14 @@ const ProfileModal: React.FC<Props> = ({ user, onClose, onUpdate, onLogout }) =>
               <>
                 <button
                   type="submit"
-                  className="w-full px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors"
+                  className="w-full px-4 py-3 text-sm font-bold text-black bg-white hover:bg-neutral-200 rounded-xl transition-colors"
                 >
                   Save Changes
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsDeleting(true)}
-                  className="flex-1 px-4 py-2 text-sm font-medium text-red-400 bg-red-900/20 hover:bg-red-900/40 border border-red-900/50 rounded-lg transition-colors"
+                  className="w-full px-4 py-3 text-sm font-medium text-red-400 bg-transparent border border-red-500/20 hover:bg-red-500/10 rounded-xl transition-colors"
                 >
                   Delete Account
                 </button>

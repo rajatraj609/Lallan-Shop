@@ -14,8 +14,6 @@ const BuyerView: React.FC<Props> = ({ user }) => {
   // Order Form State
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [orderQty, setOrderQty] = useState(1);
-  
-  // Cancel Confirmation State
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -23,18 +21,16 @@ const BuyerView: React.FC<Props> = ({ user }) => {
   }, [user.id, activeTab]);
 
   const refreshData = () => {
-    // Only show products with quantity > 0
     setProducts(getProducts().filter(p => p.quantity > 0));
-    setMyOrders(getOrdersForBuyer(user.id).reverse()); // Newest first
+    setMyOrders(getOrdersForBuyer(user.id).reverse());
   };
 
   const handleOrderSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct) return;
     
-    // Safety check
     if (orderQty > selectedProduct.quantity) {
-      alert("Quantity requested exceeds available stock.");
+      alert("Exceeds available limited edition stock.");
       return;
     }
 
@@ -55,10 +51,8 @@ const BuyerView: React.FC<Props> = ({ user }) => {
       saveOrder(newOrder);
       setSelectedProduct(null);
       setOrderQty(1);
-      setActiveTab('orders'); // Switch to orders tab to show status
+      setActiveTab('orders');
       refreshData();
-    } else {
-      alert("Failed to place order. Stock might have changed.");
     }
   };
 
@@ -78,152 +72,163 @@ const BuyerView: React.FC<Props> = ({ user }) => {
     refreshData();
   };
 
-  const getStatusColor = (status: OrderStatus) => {
-    switch (status) {
-      case 'Awaiting Confirmation': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'Confirmed': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'Delivered': return 'bg-green-100 text-green-800 border-green-200';
-      default: return 'bg-slate-100 text-slate-800';
-    }
-  };
-
   return (
-    <div className="max-w-5xl mx-auto">
-      {/* Tabs */}
-      <div className="flex space-x-1 bg-slate-200/50 p-1 rounded-xl mb-8 w-fit mx-auto">
-        <button
-          onClick={() => setActiveTab('browse')}
-          className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
-            activeTab === 'browse' 
-              ? 'bg-white text-indigo-600 shadow-sm' 
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
-          }`}
-        >
-          Browse Products
-        </button>
-        <button
-          onClick={() => setActiveTab('orders')}
-          className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
-            activeTab === 'orders' 
-              ? 'bg-white text-indigo-600 shadow-sm' 
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
-          }`}
-        >
-          My Orders
-        </button>
+    <div className="max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-8 duration-700">
+      
+      {/* Navigation Pills */}
+      <div className="flex justify-center mb-12">
+        <div className="bg-neutral-900/80 backdrop-blur border border-white/10 p-1 rounded-full inline-flex">
+          <button
+            onClick={() => setActiveTab('browse')}
+            className={`px-8 py-3 rounded-full text-sm font-medium transition-all duration-300 ${
+              activeTab === 'browse' 
+                ? 'bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.1)]' 
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            Collection
+          </button>
+          <button
+            onClick={() => setActiveTab('orders')}
+            className={`px-8 py-3 rounded-full text-sm font-medium transition-all duration-300 ${
+              activeTab === 'orders' 
+                ? 'bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.1)]' 
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            My Acquisitions
+          </button>
+        </div>
       </div>
 
       {activeTab === 'browse' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {products.length === 0 ? (
-            <div className="col-span-full py-12 text-center text-slate-500 bg-white rounded-xl border border-dashed border-slate-300">
-              No products available in the marketplace right now.
+            <div className="col-span-full py-20 text-center text-neutral-600 bg-neutral-900/20 border border-white/5 rounded-3xl">
+              <h3 className="font-display text-xl mb-2">Collection Sold Out</h3>
+              <p className="text-sm">Please check back for future drops.</p>
             </div>
           ) : (
-            products.map(product => (
-              <div key={product.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-shadow flex flex-col h-full">
-                <div className="p-6 flex-1">
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="text-xl font-bold text-slate-800">{product.name}</h3>
-                    <span className="bg-green-50 text-green-700 text-xs font-bold px-2 py-1 rounded border border-green-100">In Stock</span>
-                  </div>
-                  <p className="text-sm text-slate-500 mb-4">Sold by {product.sellerName}</p>
-                  
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="text-2xl font-bold text-slate-900">{product.quantity}</span>
-                    <span className="text-sm text-slate-500">units available</span>
-                  </div>
+            products.map((product, idx) => (
+              <div 
+                key={product.id} 
+                className="group relative bg-neutral-900/40 backdrop-blur-sm border border-white/5 rounded-3xl overflow-hidden hover:border-white/20 transition-all duration-500 hover:-translate-y-1"
+                style={{ animationDelay: `${idx * 100}ms` }}
+              >
+                {/* Abstract Product Representation since no images */}
+                <div className="h-48 bg-gradient-to-br from-neutral-800 to-black flex items-center justify-center relative overflow-hidden">
+                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.1),transparent_70%)] opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                   <h1 className="text-6xl font-display font-bold text-white/5 select-none scale-150 group-hover:scale-110 transition-transform duration-700">LALLAN</h1>
+                   <div className="absolute bottom-4 right-4">
+                      <span className="bg-white/10 backdrop-blur text-white text-[10px] font-bold px-3 py-1 rounded-full border border-white/10">IN STOCK</span>
+                   </div>
                 </div>
-                
-                <div className="p-4 bg-slate-50 border-t border-slate-100 mt-auto">
-                  <button
-                    onClick={() => { setSelectedProduct(product); setOrderQty(1); }}
-                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
-                  >
-                    Order Now
-                  </button>
+
+                <div className="p-8">
+                  <div className="mb-6">
+                    <p className="text-xs text-neutral-500 uppercase tracking-widest mb-2">Seller: {product.sellerName}</p>
+                    <h3 className="text-2xl font-display font-bold text-white group-hover:text-neutral-200 transition-colors">{product.name}</h3>
+                  </div>
+                  
+                  <div className="flex items-end justify-between border-t border-white/5 pt-6">
+                    <div>
+                      <span className="block text-[10px] text-neutral-500 uppercase tracking-widest mb-1">Available Units</span>
+                      <span className="text-xl font-mono text-white">{product.quantity}</span>
+                    </div>
+                    
+                    <button
+                      onClick={() => { setSelectedProduct(product); setOrderQty(1); }}
+                      className="px-6 py-2 bg-white text-black text-sm font-bold rounded-full hover:bg-neutral-200 transition-colors"
+                    >
+                      Acquire
+                    </button>
+                  </div>
                 </div>
               </div>
             ))
           )}
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {myOrders.length === 0 ? (
-            <div className="py-12 text-center text-slate-500 bg-white rounded-xl border border-dashed border-slate-300">
-              You haven't placed any orders yet.
+             <div className="py-20 text-center text-neutral-600 bg-neutral-900/20 border border-white/5 rounded-3xl">
+              <h3 className="font-display text-xl mb-2">No Acquisitions Yet</h3>
+              <p className="text-sm">Explore our collection to start your journey.</p>
             </div>
           ) : (
             myOrders.map(order => (
-              <div key={order.id} className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                 <div className="flex-1">
-                   <div className="flex items-center gap-3 mb-2">
-                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${getStatusColor(order.status)}`}>
-                       {order.status}
-                     </span>
-                     <span className="text-xs text-slate-400">{order.dateOrdered}</span>
-                   </div>
-                   <h3 className="text-lg font-bold text-slate-800 mb-1">{order.productName}</h3>
-                   <p className="text-sm text-slate-600">Quantity: <strong>{order.quantity}</strong></p>
-                 </div>
-                 
-                 {/* Status Flow Visualization */}
-                 <div className="flex-1 flex items-center justify-center">
-                    <div className="flex items-center w-full max-w-xs">
-                       {/* Step 1 */}
-                       <div className={`w-3 h-3 rounded-full ${['Awaiting Confirmation', 'Confirmed', 'Delivered'].includes(order.status) ? 'bg-indigo-600' : 'bg-slate-300'}`}></div>
-                       <div className={`flex-1 h-1 ${['Confirmed', 'Delivered'].includes(order.status) ? 'bg-indigo-600' : 'bg-slate-200'}`}></div>
-                       {/* Step 2 */}
-                       <div className={`w-3 h-3 rounded-full ${['Confirmed', 'Delivered'].includes(order.status) ? 'bg-indigo-600' : 'bg-slate-300'}`}></div>
-                       <div className={`flex-1 h-1 ${['Delivered'].includes(order.status) ? 'bg-indigo-600' : 'bg-slate-200'}`}></div>
-                       {/* Step 3 */}
-                       <div className={`w-3 h-3 rounded-full ${['Delivered'].includes(order.status) ? 'bg-indigo-600' : 'bg-slate-300'}`}></div>
+              <div key={order.id} className="bg-neutral-900/40 backdrop-blur border border-white/5 rounded-3xl p-8 hover:bg-neutral-900/60 transition-colors group">
+                 <div className="flex flex-col md:flex-row gap-8 items-center">
+                    
+                    {/* Order Info */}
+                    <div className="flex-1 w-full">
+                       <div className="flex items-center gap-3 mb-3">
+                         <span className="text-xs font-mono text-neutral-500">{order.dateOrdered}</span>
+                         <span className="w-1 h-1 rounded-full bg-neutral-700"></span>
+                         <span className="text-xs text-neutral-400 uppercase tracking-wider">ID: {order.id.substring(0,8)}</span>
+                       </div>
+                       <h3 className="text-2xl font-display font-bold text-white mb-2">{order.productName}</h3>
+                       <p className="text-neutral-400 text-sm">Quantity: <span className="text-white font-mono">{order.quantity}</span></p>
                     </div>
-                 </div>
+                    
+                    {/* Minimal Timeline */}
+                    <div className="flex-1 w-full flex items-center justify-center">
+                       <div className="relative w-full max-w-sm flex items-center justify-between">
+                          {/* Line */}
+                          <div className="absolute top-1/2 left-0 w-full h-px bg-neutral-800 -z-10"></div>
+                          
+                          {/* Step 1 */}
+                          <div className="flex flex-col items-center gap-2 bg-neutral-900 px-2">
+                             <div className={`w-3 h-3 rounded-full border-2 ${['Awaiting Confirmation', 'Confirmed', 'Delivered'].includes(order.status) ? 'border-white bg-white' : 'border-neutral-700 bg-neutral-900'}`}></div>
+                             <span className="text-[10px] uppercase tracking-wider text-neutral-500">Ordered</span>
+                          </div>
+                          {/* Step 2 */}
+                          <div className="flex flex-col items-center gap-2 bg-neutral-900 px-2">
+                             <div className={`w-3 h-3 rounded-full border-2 ${['Confirmed', 'Delivered'].includes(order.status) ? 'border-white bg-white' : 'border-neutral-700 bg-neutral-900'}`}></div>
+                             <span className="text-[10px] uppercase tracking-wider text-neutral-500">Confirmed</span>
+                          </div>
+                          {/* Step 3 */}
+                          <div className="flex flex-col items-center gap-2 bg-neutral-900 px-2">
+                             <div className={`w-3 h-3 rounded-full border-2 ${['Delivered'].includes(order.status) ? 'border-white bg-white' : 'border-neutral-700 bg-neutral-900'}`}></div>
+                             <span className="text-[10px] uppercase tracking-wider text-neutral-500">Delivered</span>
+                          </div>
+                       </div>
+                    </div>
 
-                 <div className="md:w-48 text-right flex justify-end">
-                    {order.status === 'Confirmed' ? (
-                      <button 
-                        onClick={() => handleConfirmDelivery(order)}
-                        className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-sm transition-colors"
-                      >
-                        Confirm Delivery
-                      </button>
-                    ) : order.status === 'Delivered' ? (
-                      <div className="text-green-600 font-medium text-sm flex items-center justify-end gap-1">
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        Order Complete
-                      </div>
-                    ) : (
-                      confirmCancelId === order.id ? (
-                        <div className="flex flex-col gap-2 w-full animate-in fade-in slide-in-from-right-2">
-                           <span className="text-xs text-red-600 text-center font-medium">Are you sure?</span>
-                           <div className="flex gap-2">
-                              <button 
-                                onClick={() => setConfirmCancelId(null)}
-                                className="flex-1 py-2 px-3 text-xs font-bold bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
-                              >
-                                No
-                              </button>
-                              <button 
+                    {/* Actions */}
+                    <div className="md:w-48 text-right flex justify-end">
+                       {order.status === 'Confirmed' ? (
+                          <button 
+                            onClick={() => handleConfirmDelivery(order)}
+                            className="px-5 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-neutral-200 transition-colors"
+                          >
+                            Mark Received
+                          </button>
+                        ) : order.status === 'Delivered' ? (
+                          <div className="px-4 py-1.5 border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full uppercase tracking-wider">
+                            Complete
+                          </div>
+                        ) : (
+                          confirmCancelId === order.id ? (
+                            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-4">
+                               <button onClick={() => setConfirmCancelId(null)} className="text-xs text-neutral-400 hover:text-white px-2">Back</button>
+                               <button 
                                 onClick={() => performCancelOrder(order.id)}
-                                className="flex-1 py-2 px-3 text-xs font-bold bg-red-600 text-white rounded-lg hover:bg-red-700 shadow-sm transition-colors"
-                              >
-                                Yes
-                              </button>
-                           </div>
-                        </div>
-                      ) : (
-                        <button 
-                          onClick={() => setConfirmCancelId(order.id)}
-                          className="w-full px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 font-medium rounded-lg shadow-sm border border-red-200 transition-colors text-sm"
-                        >
-                          Cancel Order
-                        </button>
-                      )
-                    )}
+                                className="px-4 py-1.5 bg-red-600 text-white text-xs font-bold rounded-full hover:bg-red-500"
+                               >
+                                Confirm
+                               </button>
+                            </div>
+                          ) : (
+                            <button 
+                              onClick={() => setConfirmCancelId(order.id)}
+                              className="px-5 py-2 border border-white/20 text-neutral-400 hover:text-white hover:border-white text-xs font-bold rounded-full transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          )
+                        )}
+                    </div>
                  </div>
               </div>
             ))
@@ -231,59 +236,61 @@ const BuyerView: React.FC<Props> = ({ user }) => {
         </div>
       )}
 
-      {/* Order Modal */}
+      {/* High-End Modal */}
       {selectedProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
-             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
-               <h3 className="font-bold text-slate-800">Place Order</h3>
-             </div>
-             <form onSubmit={handleOrderSubmit} className="p-6">
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-slate-500 mb-1">Product</label>
-                  <p className="font-bold text-lg text-slate-800">{selectedProduct.name}</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
+          <div className="bg-neutral-900 border border-white/10 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative">
+             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white to-transparent opacity-20"></div>
+             
+             <div className="p-8">
+                <h3 className="text-xs font-mono uppercase tracking-widest text-neutral-500 mb-6 text-center">Confirm Acquisition</h3>
+                
+                <div className="text-center mb-8">
+                   <h2 className="text-2xl font-display font-bold text-white mb-2">{selectedProduct.name}</h2>
+                   <p className="text-sm text-neutral-400">Available Stock: {selectedProduct.quantity}</p>
                 </div>
-                <div className="mb-6">
-                   <label className="block text-sm font-medium text-slate-500 mb-1">Quantity (Max: {selectedProduct.quantity})</label>
-                   <div className="flex items-center border border-slate-700 bg-slate-800 rounded-lg overflow-hidden">
+
+                <form onSubmit={handleOrderSubmit}>
+                   <div className="flex items-center justify-center gap-4 mb-8">
                       <button 
                         type="button"
-                        className="px-3 py-2 bg-slate-700 hover:bg-slate-600 border-r border-slate-600 text-slate-300"
+                        className="w-10 h-10 rounded-full border border-white/10 text-white hover:bg-white hover:text-black transition-colors"
                         onClick={() => setOrderQty(Math.max(1, orderQty - 1))}
                       >
                         -
                       </button>
                       <input 
                         type="number"
-                        className="flex-1 text-center py-2 outline-none bg-slate-800 text-white"
+                        className="w-16 text-center bg-transparent text-2xl font-mono text-white focus:outline-none"
                         value={orderQty}
-                        onChange={(e) => setOrderQty(Math.min(selectedProduct.quantity, Math.max(1, parseInt(e.target.value) || 1)))}
+                        readOnly
                       />
                       <button 
                         type="button"
-                        className="px-3 py-2 bg-slate-700 hover:bg-slate-600 border-l border-slate-600 text-slate-300"
+                        className="w-10 h-10 rounded-full border border-white/10 text-white hover:bg-white hover:text-black transition-colors"
                         onClick={() => setOrderQty(Math.min(selectedProduct.quantity, orderQty + 1))}
                       >
                         +
                       </button>
                    </div>
-                </div>
-                <div className="flex gap-3">
-                   <button 
-                     type="button"
-                     onClick={() => setSelectedProduct(null)}
-                     className="flex-1 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
-                   >
-                     Cancel
-                   </button>
-                   <button 
-                     type="submit"
-                     className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium shadow-sm"
-                   >
-                     Confirm
-                   </button>
-                </div>
-             </form>
+                   
+                   <div className="space-y-3">
+                      <button 
+                        type="submit"
+                        className="w-full py-4 bg-white text-black font-bold rounded-xl hover:bg-neutral-200 transition-colors"
+                      >
+                        Complete Order
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setSelectedProduct(null)}
+                        className="w-full py-3 text-neutral-500 hover:text-white transition-colors text-sm"
+                      >
+                        Cancel
+                      </button>
+                   </div>
+                </form>
+             </div>
           </div>
         </div>
       )}
