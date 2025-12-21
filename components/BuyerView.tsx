@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { User, Product, Order, OrderStatus } from '../types';
-import { getProducts, updateProductQuantity, saveOrder, getOrdersForBuyer, generateId, cancelOrder } from '../services/storage';
+import { User, Product, Order, UserRole, CartItem } from '../types';
+import { getProductsForSeller, saveOrder, getOrdersForBuyer, generateId, cancelOrder, getProductStockForOwner, getUsers, requestOrderReturn, getCart, addToCart, removeFromCart, clearCart, fulfillOrder } from '../services/storage';
+import CartDrawer from './CartDrawer';
 
 interface Props {
   user: User;
@@ -8,11 +9,16 @@ interface Props {
 
 const BuyerView: React.FC<Props> = ({ user }) => {
   const [activeTab, setActiveTab] = useState<'browse' | 'orders'>('browse');
-  const [products, setProducts] = useState<Product[]>([]);
+  // Product is extended with quantity for display purposes
+  const [products, setProducts] = useState<(Product & { quantity: number, sellerName: string, sellerId: string })[]>([]);
   const [myOrders, setMyOrders] = useState<Order[]>([]);
   
-  // Order Form State
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  // Cart State
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+
+  // Selection for adding to cart
+  const [selectedProduct, setSelectedProduct] = useState<(Product & { quantity: number, sellerId: string, sellerName: string }) | null>(null);
   const [orderQty, setOrderQty] = useState(1);
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
 
@@ -21,39 +27,117 @@ const BuyerView: React.FC<Props> = ({ user }) => {
   }, [user.id, activeTab]);
 
   const refreshData = () => {
-    setProducts(getProducts().filter(p => p.quantity > 0));
+    // Logic: In a real app, Buyers see products listed by Sellers.
+    // For this demo, we iterate all Sellers and get their stock.
+    const allSellers = getUsers().filter(u => u.role === UserRole.SELLER);
+    let aggregatedProducts: (Product & { quantity: number, sellerName: string, sellerId: string })[] = [];
+
+    allSellers.forEach(seller => {
+        // Use the new Service which handles both Serialized and Bulk quantity checks
+        const sellerProducts = getProductsForSeller(seller.id); 
+        const mapped = sellerProducts.map(p => ({
+            ...p,
+            sellerId: seller.id,
+            sellerName: seller.name
+        }));
+        aggregatedProducts = [...aggregatedProducts, ...mapped];
+    });
+
+    setProducts(aggregatedProducts.filter(p => p.quantity > 0));
     setMyOrders(getOrdersForBuyer(user.id).reverse());
+    setCartItems(getCart(user.id));
   };
 
-  const handleOrderSubmit = (e: React.FormEvent) => {
+  const handleAddToCartSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct) return;
     
-    if (orderQty > selectedProduct.quantity) {
-      alert("Exceeds available limited edition stock.");
+    // Double check stock
+    const currentStock = getProductStockForOwner(selectedProduct.id, selectedProduct.sellerId, selectedProduct.isSerialized);
+
+    if (orderQty > currentStock) {
+      alert("Exceeds available stock.");
       return;
     }
 
-    const success = updateProductQuantity(selectedProduct.id, orderQty);
-    if (success) {
-      const newOrder: Order = {
+    const item: CartItem = {
         id: generateId(),
         productId: selectedProduct.id,
         productName: selectedProduct.name,
-        sellerId: selectedProduct.sellerId,
-        buyerId: user.id,
-        buyerName: user.name,
         quantity: orderQty,
-        status: 'Awaiting Confirmation',
-        dateOrdered: new Date().toISOString().split('T')[0]
-      };
-      
-      saveOrder(newOrder);
-      setSelectedProduct(null);
-      setOrderQty(1);
-      setActiveTab('orders');
-      refreshData();
-    }
+        isSerialized: selectedProduct.isSerialized,
+        sellerId: selectedProduct.sellerId, // Store specific seller ID
+        price: 0 // Demo
+    };
+
+    addToCart(user.id, item);
+    setCartItems(getCart(user.id));
+    
+    setSelectedProduct(null);
+    setOrderQty(1);
+    setIsCartOpen(true);
+  };
+
+  const handleRemoveFromCart = (id: string) => {
+      removeFromCart(user.id, id);
+      setCartItems(getCart(user.id));
+  };
+
+  const handleCheckout = () => {
+      if (confirm("Place order for all items in cart?")) {
+          // Pre-validation: Check Stock for all items
+          for (const item of cartItems) {
+               // Fallback for legacy cart items without sellerId (though rare in this flow)
+               let sellerId = item.sellerId;
+               if (!sellerId) {
+                   const productInList = products.find(p => p.id === item.productId);
+                   if (productInList) sellerId = productInList.sellerId;
+               }
+
+               if (!sellerId) {
+                   alert(`Cannot identify seller for ${item.productName}. Please remove and add again.`);
+                   return;
+               }
+
+               const currentStock = getProductStockForOwner(item.productId, sellerId, item.isSerialized);
+               if (currentStock < item.quantity) {
+                   alert(`Insufficient stock for ${item.productName}. Available: ${currentStock}. Order cancelled.`);
+                   return;
+               }
+          }
+
+          // Process Orders
+          cartItems.forEach(item => {
+              // Ensure we have sellerId (validated loop above)
+              let sellerId = item.sellerId;
+              if (!sellerId) {
+                   const productInList = products.find(p => p.id === item.productId);
+                   if (productInList) sellerId = productInList.sellerId;
+              }
+
+              if (sellerId) {
+                  const newOrder: Order = {
+                    id: generateId(),
+                    productId: item.productId,
+                    productName: item.productName,
+                    sellerId: sellerId,
+                    buyerId: user.id,
+                    buyerName: user.name,
+                    quantity: item.quantity,
+                    status: 'Awaiting Confirmation', // Sellers must confirm
+                    dateOrdered: new Date().toISOString().split('T')[0]
+                  };
+                  saveOrder(newOrder);
+              }
+          });
+
+          clearCart(user.id);
+          setCartItems([]);
+          setIsCartOpen(false);
+          setActiveTab('orders');
+          refreshData();
+          alert("Orders placed successfully!");
+      }
   };
 
   const handleConfirmDelivery = (order: Order) => {
@@ -72,11 +156,19 @@ const BuyerView: React.FC<Props> = ({ user }) => {
     refreshData();
   };
 
+  const handleReturnItem = (orderId: string) => {
+      if (confirm('Are you sure you want to return this item? It will be sent back to the seller.')) {
+        requestOrderReturn(orderId);
+        refreshData();
+      }
+  };
+
   return (
     <div className="max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-8 duration-700">
       
       {/* Navigation Pills */}
-      <div className="flex justify-center mb-12">
+      <div className="flex justify-between items-center mb-12">
+        <div className="flex-1"></div>
         <div className="bg-neutral-900/80 backdrop-blur border border-white/10 p-1 rounded-full inline-flex">
           <button
             onClick={() => setActiveTab('browse')}
@@ -99,6 +191,21 @@ const BuyerView: React.FC<Props> = ({ user }) => {
             My Acquisitions
           </button>
         </div>
+        <div className="flex-1 flex justify-end">
+             <button 
+               onClick={() => setIsCartOpen(true)}
+               className="relative p-3 bg-neutral-800 rounded-full hover:bg-white hover:text-black transition-colors"
+             >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                </svg>
+                {cartItems.length > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-white text-black text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-black">
+                        {cartItems.reduce((acc, item) => acc + item.quantity, 0)}
+                    </span>
+                )}
+             </button>
+        </div>
       </div>
 
       {activeTab === 'browse' ? (
@@ -111,7 +218,7 @@ const BuyerView: React.FC<Props> = ({ user }) => {
           ) : (
             products.map((product, idx) => (
               <div 
-                key={product.id} 
+                key={`${product.id}-${product.sellerId}`} 
                 className="group relative bg-neutral-900/40 backdrop-blur-sm border border-white/5 rounded-3xl overflow-hidden hover:border-white/20 transition-all duration-500 hover:-translate-y-1"
                 style={{ animationDelay: `${idx * 100}ms` }}
               >
@@ -119,8 +226,10 @@ const BuyerView: React.FC<Props> = ({ user }) => {
                 <div className="h-48 bg-gradient-to-br from-neutral-800 to-black flex items-center justify-center relative overflow-hidden">
                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.1),transparent_70%)] opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                    <h1 className="text-6xl font-display font-bold text-white/5 select-none scale-150 group-hover:scale-110 transition-transform duration-700">LALLAN</h1>
-                   <div className="absolute bottom-4 right-4">
-                      <span className="bg-white/10 backdrop-blur text-white text-[10px] font-bold px-3 py-1 rounded-full border border-white/10">IN STOCK</span>
+                   <div className="absolute bottom-4 right-4 flex gap-2">
+                      <span className={`backdrop-blur text-[10px] font-bold px-3 py-1 rounded-full border ${product.isSerialized ? 'bg-blue-500/20 border-blue-500/30 text-blue-300' : 'bg-amber-500/20 border-amber-500/30 text-amber-300'}`}>
+                          {product.isSerialized ? 'SERIALIZED' : 'BULK'}
+                      </span>
                    </div>
                 </div>
 
@@ -167,7 +276,15 @@ const BuyerView: React.FC<Props> = ({ user }) => {
                          <span className="w-1 h-1 rounded-full bg-neutral-700"></span>
                          <span className="text-xs text-neutral-400 uppercase tracking-wider">ID: {order.id.substring(0,8)}</span>
                        </div>
-                       <h3 className="text-2xl font-display font-bold text-white mb-2">{order.productName}</h3>
+                       <div className="flex items-center gap-2 mb-2">
+                           <h3 className="text-2xl font-display font-bold text-white">{order.productName}</h3>
+                           {order.status === 'Return Requested' && (
+                               <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-bold uppercase">Return Pending</span>
+                           )}
+                           {order.status === 'Returned' && (
+                               <span className="px-2 py-0.5 rounded-full bg-neutral-500/10 border border-neutral-500/20 text-neutral-400 text-[10px] font-bold uppercase">Returned</span>
+                           )}
+                       </div>
                        <p className="text-neutral-400 text-sm">Quantity: <span className="text-white font-mono">{order.quantity}</span></p>
                     </div>
                     
@@ -179,17 +296,17 @@ const BuyerView: React.FC<Props> = ({ user }) => {
                           
                           {/* Step 1 */}
                           <div className="flex flex-col items-center gap-2 bg-neutral-900 px-2">
-                             <div className={`w-3 h-3 rounded-full border-2 ${['Awaiting Confirmation', 'Confirmed', 'Delivered'].includes(order.status) ? 'border-white bg-white' : 'border-neutral-700 bg-neutral-900'}`}></div>
+                             <div className={`w-3 h-3 rounded-full border-2 ${['Awaiting Confirmation', 'Confirmed', 'Delivered', 'Return Requested', 'Returned'].includes(order.status) ? 'border-white bg-white' : 'border-neutral-700 bg-neutral-900'}`}></div>
                              <span className="text-[10px] uppercase tracking-wider text-neutral-500">Ordered</span>
                           </div>
                           {/* Step 2 */}
                           <div className="flex flex-col items-center gap-2 bg-neutral-900 px-2">
-                             <div className={`w-3 h-3 rounded-full border-2 ${['Confirmed', 'Delivered'].includes(order.status) ? 'border-white bg-white' : 'border-neutral-700 bg-neutral-900'}`}></div>
+                             <div className={`w-3 h-3 rounded-full border-2 ${['Confirmed', 'Delivered', 'Return Requested', 'Returned'].includes(order.status) ? 'border-white bg-white' : 'border-neutral-700 bg-neutral-900'}`}></div>
                              <span className="text-[10px] uppercase tracking-wider text-neutral-500">Confirmed</span>
                           </div>
                           {/* Step 3 */}
                           <div className="flex flex-col items-center gap-2 bg-neutral-900 px-2">
-                             <div className={`w-3 h-3 rounded-full border-2 ${['Delivered'].includes(order.status) ? 'border-white bg-white' : 'border-neutral-700 bg-neutral-900'}`}></div>
+                             <div className={`w-3 h-3 rounded-full border-2 ${['Delivered', 'Return Requested', 'Returned'].includes(order.status) ? 'border-white bg-white' : 'border-neutral-700 bg-neutral-900'}`}></div>
                              <span className="text-[10px] uppercase tracking-wider text-neutral-500">Delivered</span>
                           </div>
                        </div>
@@ -205,9 +322,21 @@ const BuyerView: React.FC<Props> = ({ user }) => {
                             Mark Received
                           </button>
                         ) : order.status === 'Delivered' ? (
-                          <div className="px-4 py-1.5 border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full uppercase tracking-wider">
-                            Complete
+                          <div className="flex flex-col items-end gap-2">
+                              <div className="px-4 py-1.5 border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full uppercase tracking-wider">
+                                Delivered
+                              </div>
+                              <button 
+                                onClick={() => handleReturnItem(order.id)}
+                                className="text-xs text-neutral-500 hover:text-white underline"
+                              >
+                                Return Item
+                              </button>
                           </div>
+                        ) : order.status === 'Return Requested' ? (
+                            <div className="text-xs text-amber-500 font-medium">Processing Return</div>
+                        ) : order.status === 'Returned' ? (
+                            <div className="text-xs text-neutral-500">Return Complete</div>
                         ) : (
                           confirmCancelId === order.id ? (
                             <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-4">
@@ -236,21 +365,30 @@ const BuyerView: React.FC<Props> = ({ user }) => {
         </div>
       )}
 
-      {/* High-End Modal */}
+      <CartDrawer 
+         isOpen={isCartOpen}
+         onClose={() => setIsCartOpen(false)}
+         cartItems={cartItems}
+         onRemoveItem={handleRemoveFromCart}
+         onCheckout={handleCheckout}
+      />
+
+      {/* High-End Modal for Adding to Cart */}
       {selectedProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
           <div className="bg-neutral-900 border border-white/10 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative">
              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white to-transparent opacity-20"></div>
              
              <div className="p-8">
-                <h3 className="text-xs font-mono uppercase tracking-widest text-neutral-500 mb-6 text-center">Confirm Acquisition</h3>
+                <h3 className="text-xs font-mono uppercase tracking-widest text-neutral-500 mb-6 text-center">Add to Cart</h3>
                 
                 <div className="text-center mb-8">
                    <h2 className="text-2xl font-display font-bold text-white mb-2">{selectedProduct.name}</h2>
                    <p className="text-sm text-neutral-400">Available Stock: {selectedProduct.quantity}</p>
+                   <p className="text-[10px] text-neutral-500 uppercase tracking-widest mt-2">Seller: {selectedProduct.sellerName}</p>
                 </div>
 
-                <form onSubmit={handleOrderSubmit}>
+                <form onSubmit={handleAddToCartSubmit}>
                    <div className="flex items-center justify-center gap-4 mb-8">
                       <button 
                         type="button"
@@ -279,7 +417,7 @@ const BuyerView: React.FC<Props> = ({ user }) => {
                         type="submit"
                         className="w-full py-4 bg-white text-black font-bold rounded-xl hover:bg-neutral-200 transition-colors"
                       >
-                        Complete Order
+                        Add to Cart
                       </button>
                       <button 
                         type="button"
