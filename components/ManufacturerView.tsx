@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User, Product, UserRole, ProductUnit, CartItem } from '../types';
 import { getUsersByRole, saveProductBatch, getProducts, getAvailableSerialNumbers, updateProductUnits, generateId, getManufacturerDispatchHistory, deleteProductUnit, deleteProduct, getProductUnits, transferBulkStock, addToCart, getCart, removeFromCart, clearCart, getBulkStock, generateNextSerialBatch } from '../services/storage';
 import CartDrawer from './CartDrawer';
@@ -15,10 +15,13 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
   const [isSerialized, setIsSerialized] = useState(true);
   const [qty, setQty] = useState(1);
   const [mfgDate, setMfgDate] = useState(new Date().toISOString().split('T')[0]);
+  const [productImages, setProductImages] = useState<string[]>([]);
   
   // Replaced manual entry with generated list
   const [generatedSerials, setGeneratedSerials] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- DISTRIBUTION STATE ---
   const [distMode, setDistMode] = useState<'new' | 'history'>('new');
@@ -60,6 +63,62 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
       }
   };
 
+  // Image Handling
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files.length > 0) {
+          const files = Array.from(e.target.files);
+          const remainingSlots = 5 - productImages.length;
+          const filesToProcess = files.slice(0, remainingSlots);
+          
+          if (files.length > remainingSlots) {
+              alert(`Only ${remainingSlots} more image(s) allowed.`);
+          }
+
+          filesToProcess.forEach(file => {
+              const reader = new FileReader();
+              reader.onload = (ev) => {
+                  const img = new Image();
+                  img.onload = () => {
+                      // Resize logic to save LocalStorage space (Max 600px width/height)
+                      const canvas = document.createElement('canvas');
+                      const ctx = canvas.getContext('2d');
+                      const maxWidth = 600;
+                      const maxHeight = 600;
+                      let width = img.width;
+                      let height = img.height;
+
+                      if (width > height) {
+                          if (width > maxWidth) {
+                              height *= maxWidth / width;
+                              width = maxWidth;
+                          }
+                      } else {
+                          if (height > maxHeight) {
+                              width *= maxHeight / height;
+                              height = maxHeight;
+                          }
+                      }
+
+                      canvas.width = width;
+                      canvas.height = height;
+                      ctx?.drawImage(img, 0, 0, width, height);
+                      
+                      const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                      setProductImages(prev => [...prev, compressedBase64]);
+                  };
+                  img.src = ev.target?.result as string;
+              };
+              reader.readAsDataURL(file);
+          });
+      }
+      // Reset input
+      if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removeImage = (index: number) => {
+      setProductImages(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleProductionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSerialized && generatedSerials.length === 0) {
@@ -74,7 +133,8 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
       id: productId,
       name: prodName,
       manufacturerId: user.id,
-      isSerialized: isSerialized
+      isSerialized: isSerialized,
+      images: productImages
     };
 
     const units: Partial<ProductUnit>[] = isSerialized ? generatedSerials.map(sn => ({
@@ -95,7 +155,8 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
     setIsSerialized(true);
     setQty(1);
     setGeneratedSerials([]);
-    alert("Production batch registered successfully with Secure Anti-Counterfeit Hashes.");
+    setProductImages([]);
+    alert("Production batch registered successfully.");
   };
 
   // --- DISTRIBUTION LOGIC ---
@@ -353,6 +414,48 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
                 </div>
               </div>
 
+              {/* Image Upload Section */}
+              <div className="space-y-3 p-4 bg-black/30 rounded-xl border border-white/5">
+                  <div className="flex justify-between items-center">
+                      <label className="text-xs uppercase tracking-wider text-neutral-400 font-medium">Product Images (Max 5)</label>
+                      <span className="text-xs text-neutral-500">{productImages.length}/5 Uploaded</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-5 gap-3">
+                      {productImages.map((img, idx) => (
+                          <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-white/10 group">
+                              <img src={img} alt="Preview" className="w-full h-full object-cover" />
+                              <button 
+                                type="button" 
+                                onClick={() => removeImage(idx)}
+                                className="absolute top-1 right-1 p-1 bg-red-600 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                              </button>
+                          </div>
+                      ))}
+                      
+                      {productImages.length < 5 && (
+                          <button 
+                            type="button" 
+                            onClick={() => fileInputRef.current?.click()}
+                            className="aspect-square rounded-lg border border-dashed border-white/20 flex flex-col items-center justify-center text-neutral-500 hover:text-white hover:border-white/40 transition-colors"
+                          >
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 mb-1"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                              <span className="text-[9px] uppercase tracking-wide">Add</span>
+                          </button>
+                      )}
+                  </div>
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    className="hidden" 
+                    multiple 
+                    accept="image/*"
+                    onChange={handleImageSelect}
+                  />
+              </div>
+
               {/* Serialization Toggle */}
               <div className="flex items-center gap-4 bg-black/30 p-4 rounded-xl border border-white/5">
                  <label className="relative inline-flex items-center cursor-pointer">
@@ -450,8 +553,12 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
                          <div key={p.id} className="bg-black/30 border border-white/5 rounded-2xl overflow-hidden">
                              <div className="p-4 flex items-center justify-between">
                                  <div className="flex items-center gap-4">
-                                     <div className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center text-white font-bold">
-                                         {p.name.charAt(0)}
+                                     <div className="w-16 h-16 rounded-xl bg-neutral-800 flex items-center justify-center text-white font-bold overflow-hidden border border-white/10">
+                                         {p.images && p.images.length > 0 ? (
+                                             <img src={p.images[0]} alt="" className="w-full h-full object-cover" />
+                                         ) : (
+                                             p.name.charAt(0)
+                                         )}
                                      </div>
                                      <div>
                                          <h3 className="text-white font-medium flex items-center gap-2">
@@ -572,7 +679,14 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                  {/* Reusing Product List Logic roughly for selection */}
                  {getProducts().filter(p => p.manufacturerId === user.id).map(product => (
-                     <div key={product.id} className="bg-neutral-900 border border-white/5 p-6 rounded-2xl hover:border-white/20 transition-all">
+                     <div key={product.id} className="bg-neutral-900 border border-white/5 p-6 rounded-2xl hover:border-white/20 transition-all group">
+                        <div className="w-full h-32 bg-black/50 rounded-lg mb-4 overflow-hidden border border-white/5">
+                            {product.images && product.images.length > 0 ? (
+                                <img src={product.images[0]} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center text-neutral-700 font-display font-bold text-2xl">LALLAN</div>
+                            )}
+                        </div>
                         <div className="flex justify-between items-start mb-4">
                             <div>
                                 <h3 className="text-white font-bold">{product.name}</h3>

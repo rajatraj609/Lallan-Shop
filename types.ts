@@ -81,8 +81,9 @@ export interface Product {
   id: string;
   name: string;
   manufacturerId: string;
-  isSerialized: boolean; // New Flag
+  isSerialized: boolean; 
   description?: string;
+  images?: string[]; // Array of Base64 strings
 }
 
 export interface CartItem {

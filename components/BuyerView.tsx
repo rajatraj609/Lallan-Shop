@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Product, Order, UserRole, CartItem, ProductUnit } from '../types';
 import { getProductsForSeller, getOrdersForBuyer, generateId, cancelOrder, getProductStockForOwner, getUsers, requestOrderReturn, getCart, addToCart, removeFromCart, clearCart, getProductUnits, processCheckout, saveOrder } from '../services/storage';
 import CartDrawer from './CartDrawer';
+import ProductImageGallery from './ProductImageGallery';
 
 interface Props {
   user: User;
@@ -214,12 +215,19 @@ const BuyerView: React.FC<Props> = ({ user }) => {
                 className="group relative bg-neutral-900/40 backdrop-blur-sm border border-white/5 rounded-3xl overflow-hidden hover:border-white/20 transition-all duration-500 hover:-translate-y-1"
                 style={{ animationDelay: `${idx * 100}ms` }}
               >
-                {/* Abstract Product Representation since no images */}
-                <div className="h-48 bg-gradient-to-br from-neutral-800 to-black flex items-center justify-center relative overflow-hidden">
-                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.1),transparent_70%)] opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                   <h1 className="text-6xl font-display font-bold text-white/5 select-none scale-150 group-hover:scale-110 transition-transform duration-700">LALLAN</h1>
-                   <div className="absolute bottom-4 right-4 flex gap-2">
-                      <span className={`backdrop-blur text-[10px] font-bold px-3 py-1 rounded-full border ${product.isSerialized ? 'bg-blue-500/20 border-blue-500/30 text-blue-300' : 'bg-amber-500/20 border-amber-500/30 text-amber-300'}`}>
+                {/* Product Image Section */}
+                <div className="w-full aspect-[4/3] bg-neutral-950 flex items-center justify-center relative overflow-hidden group-hover:shadow-2xl transition-shadow">
+                    {product.images && product.images.length > 0 ? (
+                        <ProductImageGallery images={product.images} productName={product.name} />
+                    ) : (
+                        // Fallback Abstract Art
+                        <div className="w-full h-full bg-gradient-to-br from-neutral-800 to-black flex items-center justify-center relative overflow-hidden">
+                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.1),transparent_70%)] opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                            <h1 className="text-6xl font-display font-bold text-white/5 select-none scale-150 group-hover:scale-110 transition-transform duration-700">LALLAN</h1>
+                        </div>
+                    )}
+                   <div className="absolute top-4 right-4 flex gap-2 z-10 pointer-events-none">
+                      <span className={`backdrop-blur text-[10px] font-bold px-3 py-1 rounded-full border shadow-lg ${product.isSerialized ? 'bg-blue-500/20 border-blue-500/30 text-blue-300' : 'bg-amber-500/20 border-amber-500/30 text-amber-300'}`}>
                           {product.isSerialized ? 'SERIALIZED' : 'BULK'}
                       </span>
                    </div>

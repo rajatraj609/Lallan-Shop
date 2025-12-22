@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { verifyProductIdentity, getProducts, getProductStockForOwner, getUsersByRole } from '../services/storage';
 import { UserRole } from '../types';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
+import { GoogleGenAI, Type } from "@google/genai";
 
 interface Message {
     sender: 'bot' | 'user';
@@ -30,13 +31,25 @@ const AskeChatbot: React.FC = () => {
   // Helper Logic State
   const [helperMessages, setHelperMessages] = useState<Message[]>([]);
   const [helperInput, setHelperInput] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Handle Button Animation Timer
+  // Handle Closing & Reset Logic
   useEffect(() => {
     if (!isOpen) {
+        // RESET STATE when closed to prevent scanner from persisting
+        if (isScanning) {
+            stopScanner();
+        }
+        // Reset verify step to input so it doesn't default to scan on reopen
+        if (activeMode === 'verify') {
+             setVerifyStep('input-code');
+             setVerifyMessages([]);
+             setInputCode('');
+        }
+
         setIsButtonExpanded(true);
         const timer = setTimeout(() => {
             setIsButtonExpanded(false);
@@ -48,7 +61,7 @@ const AskeChatbot: React.FC = () => {
   // Auto-Greeting for Helper
   useEffect(() => {
     if (isOpen && activeMode === 'helper' && helperMessages.length === 0) {
-        setHelperMessages([{sender: 'bot', text: "Hello. I am your Lallan Personal Assistant. How can I assist you with our collection today?"}]);
+        setHelperMessages([{sender: 'bot', text: "Hello. I am Aske, your intelligent concierge. Ask me about our collection, dimensions, or styling advice."}]);
     }
   }, [isOpen, activeMode]);
 
@@ -59,6 +72,7 @@ const AskeChatbot: React.FC = () => {
         setVerifyMessages([]);
         setVerifyStep('input-code');
         setInputCode('');
+        stopScanner(); // Ensure scanner is off when entering tab
         
         const t1 = setTimeout(() => {
             setIsRetracted(true);
@@ -73,7 +87,7 @@ const AskeChatbot: React.FC = () => {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [verifyMessages, helperMessages, activeMode]);
+  }, [verifyMessages, helperMessages, activeMode, isTyping]);
 
   // Cleanup Scanner on Unmount
   useEffect(() => {
@@ -83,63 +97,78 @@ const AskeChatbot: React.FC = () => {
   }, []);
 
   const stopScanner = () => {
+      // Always turn off scanning flag immediately
+      setIsScanning(false);
+
       if (scannerRef.current) {
           if (scannerRef.current.isScanning) {
               scannerRef.current.stop().then(() => {
-                  scannerRef.current?.clear();
-                  setIsScanning(false);
-              }).catch(err => console.error("Failed to stop scanner", err));
+                  try {
+                    scannerRef.current?.clear();
+                  } catch (e) {
+                    // ignore
+                  }
+              }).catch(err => {
+                  console.warn("Scanner stop warning:", err);
+              });
           } else {
-              scannerRef.current.clear();
-              setIsScanning(false);
+              try {
+                scannerRef.current.clear();
+              } catch (e) {
+                 // ignore
+              }
           }
       }
   };
 
-  const startScanner = async () => {
+  const startScanner = () => {
     setScannerError('');
-    setIsScanning(true);
+    setIsScanning(true); // Mounts the div
     
-    try {
-        // AI-Enhanced Setup: Use experimental features for BarcodeDetector if available
-        const scanner = new Html5Qrcode("reader", { 
-            experimentalFeatures: { useBarCodeDetectorIfSupported: true },
-            verbose: false
-        });
-        scannerRef.current = scanner;
-
-        const config = { 
-            fps: 20, // High FPS for fluid tracking
-            qrbox: { width: 250, height: 250 }, // Focused scanning region
-            aspectRatio: 1.0
-        };
-
-        await scanner.start(
-            { facingMode: "environment" }, 
-            config, 
-            (decodedText) => {
-                handleScanSuccess(decodedText);
-            },
-            (errorMessage) => {
-                // Ignore frame parse errors, they are noisy
+    // Slight delay to ensure DOM element with id="reader" is rendered by React
+    setTimeout(async () => {
+        try {
+            const element = document.getElementById("reader");
+            if (!element) {
+                // If element is gone (user closed modal or switched tab), abort
+                return; 
             }
-        );
-    } catch (err: any) {
-        console.error("Scanner Error:", err);
-        setScannerError("Camera access denied or unavailable.");
-        setIsScanning(false);
-        setVerifyMessages(prev => [...prev, { sender: 'bot', text: "Error: Camera access required for scanning." }]);
-    }
+
+            const scanner = new Html5Qrcode("reader", { 
+                experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+                verbose: false
+            });
+            scannerRef.current = scanner;
+
+            const config = { 
+                fps: 20, 
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0
+            };
+
+            await scanner.start(
+                { facingMode: "environment" }, 
+                config, 
+                (decodedText) => {
+                    handleScanSuccess(decodedText);
+                },
+                (errorMessage) => {
+                    // Ignore frame parse errors
+                }
+            );
+        } catch (err: any) {
+            console.error("Scanner Error:", err);
+            setScannerError("Camera access denied or unavailable.");
+            setIsScanning(false); 
+            setVerifyMessages(prev => [...prev, { sender: 'bot', text: "Error: Camera access required for scanning." }]);
+        }
+    }, 100);
   };
 
   const handleScanSuccess = (decodedText: string) => {
-      // 1. Haptic Feedback
       if (navigator.vibrate) navigator.vibrate(200);
-      
-      // 2. Visual Feedback (Green Flash) handled via verifyStep transition
       stopScanner();
       
-      // 3. Process
       setVerifyStep('verifying');
       setVerifyMessages(prev => [...prev, { sender: 'user', text: `[Scanned]: ${decodedText}` }]);
       
@@ -157,43 +186,30 @@ const AskeChatbot: React.FC = () => {
       reader.onload = (event) => {
           const img = new Image();
           img.onload = () => {
-              // Create Canvas for AI Pre-processing
               const canvas = document.createElement('canvas');
               const ctx = canvas.getContext('2d');
               if (!ctx) return;
 
               canvas.width = img.width;
               canvas.height = img.height;
-
-              // Draw Image
               ctx.drawImage(img, 0, 0);
 
               // Apply Contrast & Grayscale Filters
-              // Note: Canvas filters aren't always supported for context manipulation directly in all browsers easily without getImageData loop,
-              // but we can use filter property if supported or iterate pixels.
-              // Fast simple contrast stretch:
               const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
               const data = imageData.data;
-              const factor = (259 * (128 + 255)) / (255 * (259 - 128)); // Contrast factor
+              const factor = (259 * (128 + 255)) / (255 * (259 - 128));
 
               for (let i = 0; i < data.length; i += 4) {
-                  // Grayscale
                   const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
                   let color = avg;
-                  
-                  // Contrast
                   color = factor * (color - 128) + 128;
-                  
-                  // Clamp
                   color = Math.max(0, Math.min(255, color));
-
-                  data[i] = color;     // R
-                  data[i + 1] = color; // G
-                  data[i + 2] = color; // B
+                  data[i] = color;
+                  data[i + 1] = color;
+                  data[i + 2] = color;
               }
               ctx.putImageData(imageData, 0, 0);
 
-              // Convert back to File/Blob for Html5Qrcode
               canvas.toBlob(async (blob) => {
                   if (blob) {
                       const processedFile = new File([blob], "processed_qr.png", { type: "image/png" });
@@ -236,44 +252,73 @@ const AskeChatbot: React.FC = () => {
      }
   };
 
-  // --- Helper Chat Logic ---
-  const handleHelperSubmit = (e: React.FormEvent) => {
+  // --- Helper Chat Logic with Gemini ---
+  const handleHelperSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!helperInput.trim()) return;
       
       const userText = helperInput.trim();
       setHelperMessages(prev => [...prev, { sender: 'user', text: userText }]);
       setHelperInput('');
+      setIsTyping(true);
 
-      setTimeout(() => {
+      try {
+          // 1. Gather Context
           const products = getProducts();
           const sellers = getUsersByRole(UserRole.SELLER);
-          const foundProduct = products.find(p => userText.toLowerCase().includes(p.name.toLowerCase()));
           
-          if (foundProduct) {
+          const inventoryList = products.map(p => {
              let totalStock = 0;
              sellers.forEach(s => {
-                 totalStock += getProductStockForOwner(foundProduct.id, s.id, foundProduct.isSerialized);
+                 totalStock += getProductStockForOwner(p.id, s.id, p.isSerialized);
              });
+             return `- ${p.name} (Type: ${p.isSerialized ? 'Serialized Unique Item' : 'Bulk Item'}, Stock: ${totalStock}, Desc: ${p.description || 'Premium Luxury Item'})`;
+          }).join('\n');
 
-             const stockStatus = totalStock > 5 ? "In Stock" : totalStock > 0 ? `Only ${totalStock} left` : "Currently Out of Stock";
-             const price = (Math.random() * 500 + 100).toFixed(0); 
-             
-             const reply = `I found the ${foundProduct.name}. It is ${stockStatus}.\nApprox Price: $${price}.\n\nThis is a premium item featuring ${foundProduct.isSerialized ? 'individual serial tracking' : 'bulk availability'}.`;
-             
-             setHelperMessages(prev => [...prev, { sender: 'bot', text: reply, googleQuery: foundProduct.name }]);
+          // 2. Call Gemini API
+          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+          const response = await ai.models.generateContent({
+             model: 'gemini-3-flash-preview',
+             contents: userText,
+             config: {
+                 systemInstruction: `You are 'Aske', the intelligent AI concierge for 'Lallan Shop'.
+                 Your tone is sophisticated, helpful, and concise.
+                 
+                 Current Inventory:
+                 ${inventoryList}
+                 
+                 Instructions:
+                 1. Answer the user's question based on the inventory.
+                 2. If they ask about dimensions/fit, infer from the name (e.g. 'Watch' fits wrist, 'Sofa' needs room).
+                 3. If discussing a specific product from our inventory, you MUST include its name in the 'productName' field.
+                 4. If unsure or item is missing, suggest contacting the Admin via the Messaging Drawer.
+                 5. Response MUST be in JSON format.`,
+                 responseMimeType: "application/json",
+                 responseSchema: {
+                     type: Type.OBJECT,
+                     properties: {
+                         response: { type: Type.STRING },
+                         productName: { type: Type.STRING, nullable: true }
+                     }
+                 }
+             }
+          });
 
-          } else if (userText.toLowerCase().includes('stock')) {
-              setHelperMessages(prev => [...prev, { sender: 'bot', text: "Please tell me the product name you are looking for." }]);
-          } else if (userText.toLowerCase().includes('fake') || userText.toLowerCase().includes('real')) {
-              setHelperMessages(prev => [...prev, { sender: 'bot', text: "Please switch to the 'Authenticity Check' mode using the toggle above." }]);
-          } else {
-              setHelperMessages(prev => [...prev, { sender: 'bot', text: "I couldn't find that specific item. Try searching for 'Noir' or 'Chronograph'." }]);
-          }
-      }, 600);
+          const jsonRes = JSON.parse(response.text || '{}');
+          
+          setHelperMessages(prev => [...prev, { 
+              sender: 'bot', 
+              text: jsonRes.response || "I am processing your request...", 
+              googleQuery: jsonRes.productName 
+          }]);
+
+      } catch (error) {
+          console.error("AI Error:", error);
+          setHelperMessages(prev => [...prev, { sender: 'bot', text: "I am currently unable to access the neural network. Please try again or contact Admin." }]);
+      } finally {
+          setIsTyping(false);
+      }
   };
-
-  // --- Components ---
 
   const LiquidBranding = ({ collapsed }: { collapsed: boolean }) => {
     return (
@@ -354,47 +399,48 @@ const AskeChatbot: React.FC = () => {
 
       <div className="flex-1 flex flex-col relative overflow-hidden bg-neutral-900/50">
           
-          {/* CAMERA OVERLAY */}
-          <div className={`absolute inset-0 z-30 bg-black flex flex-col transition-transform duration-500 ${isScanning ? 'translate-y-0' : 'translate-y-full'}`}>
-              <div className="relative flex-1 overflow-hidden">
-                  <div id="reader" className="w-full h-full object-cover"></div>
-                  
-                  {/* Custom Scanner UI Overlay */}
-                  <div className="absolute inset-0 pointer-events-none z-10">
-                      <div className="absolute inset-0 border-[40px] border-black/50"></div>
-                      <div className="absolute top-[20%] left-[10%] right-[10%] bottom-[20%] border-2 border-white/30 rounded-lg flex items-center justify-center overflow-hidden">
-                           {/* Futuristic Laser Line */}
-                           <div className="w-[120%] h-1 bg-red-500/80 shadow-[0_0_15px_rgba(239,68,68,1)] animate-[scan_1.5s_ease-in-out_infinite]"></div>
-                      </div>
-                      <div className="absolute bottom-10 w-full text-center text-xs text-white/70 font-mono tracking-widest animate-pulse">
-                          AI VISION ACTIVE
+          {/* CAMERA OVERLAY - CONDITIONALLY RENDERED ONLY WHEN SCANNING IS TRUE */}
+          {activeMode === 'verify' && isScanning && (
+              <div className="absolute inset-0 z-30 bg-black flex flex-col animate-in fade-in duration-300">
+                  <div className="relative flex-1 overflow-hidden">
+                      <div id="reader" className="w-full h-full object-cover"></div>
+                      
+                      {/* Custom Scanner UI Overlay */}
+                      <div className="absolute inset-0 pointer-events-none z-10">
+                          <div className="absolute inset-0 border-[40px] border-black/50"></div>
+                          <div className="absolute top-[20%] left-[10%] right-[10%] bottom-[20%] border-2 border-white/30 rounded-lg flex items-center justify-center overflow-hidden">
+                              <div className="w-[120%] h-1 bg-red-500/80 shadow-[0_0_15px_rgba(239,68,68,1)] animate-[scan_1.5s_ease-in-out_infinite]"></div>
+                          </div>
+                          <div className="absolute bottom-10 w-full text-center text-xs text-white/70 font-mono tracking-widest animate-pulse">
+                              AI VISION ACTIVE
+                          </div>
                       </div>
                   </div>
-              </div>
-              <div className="p-4 bg-neutral-900 border-t border-white/10 flex gap-3">
-                  <button 
-                    onClick={stopScanner}
-                    className="flex-1 py-3 bg-neutral-800 text-white rounded-xl font-bold hover:bg-neutral-700"
-                  >
-                      Cancel Scan
-                  </button>
-                  {/* Manual Upload Button for Pre-processing */}
-                  <div className="relative">
-                      <button className="h-full px-4 bg-neutral-800 text-neutral-400 rounded-xl hover:bg-neutral-700 border border-white/5">
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-                          </svg>
+                  <div className="p-4 bg-neutral-900 border-t border-white/10 flex gap-3">
+                      <button 
+                        onClick={stopScanner}
+                        className="flex-1 py-3 bg-neutral-800 text-white rounded-xl font-bold hover:bg-neutral-700"
+                      >
+                          Cancel Scan
                       </button>
-                      <input 
-                        type="file" 
-                        ref={fileInputRef}
-                        accept="image/*"
-                        className="absolute inset-0 opacity-0 cursor-pointer"
-                        onChange={handleFileUpload}
-                      />
+                      {/* Manual Upload Button */}
+                      <div className="relative">
+                          <button className="h-full px-4 bg-neutral-800 text-neutral-400 rounded-xl hover:bg-neutral-700 border border-white/5">
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                              </svg>
+                          </button>
+                          <input 
+                            type="file" 
+                            ref={fileInputRef}
+                            accept="image/*"
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                            onChange={handleFileUpload}
+                          />
+                      </div>
                   </div>
               </div>
-          </div>
+          )}
 
           {/* HIDDEN READER FOR FILE SCANS */}
           <div id="reader-hidden" className="hidden"></div>
@@ -404,17 +450,46 @@ const AskeChatbot: React.FC = () => {
               <div className="absolute inset-0 flex flex-col animate-in fade-in slide-in-from-left-4 duration-500">
                   <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
                       {helperMessages.map((msg, idx) => (
-                          <div key={idx} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                              <div className={`relative max-w-[85%] p-3 rounded-2xl text-sm leading-relaxed shadow-lg ${msg.sender === 'user' ? 'bg-white text-black rounded-tr-none' : 'bg-neutral-800 text-neutral-200 border border-white/5 rounded-tl-none'}`}>
-                                  <div className="whitespace-pre-wrap">{msg.text}</div>
+                          <div key={idx} className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'} mb-4`}>
+                              <div className={`relative max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed shadow-lg backdrop-blur-md ${msg.sender === 'user' ? 'bg-white text-black rounded-tr-none' : 'bg-neutral-800/80 text-neutral-200 border border-white/10 rounded-tl-none'}`}>
+                                  <div className="whitespace-pre-wrap font-sans">{msg.text}</div>
+                                  
+                                  {/* Google Search Integration */}
+                                  {msg.sender === 'bot' && msg.googleQuery && (
+                                      <div className="mt-3 pt-2 border-t border-white/10 flex justify-end">
+                                          <a 
+                                              href={`https://www.google.com/search?q=${encodeURIComponent(msg.googleQuery)}`} 
+                                              target="_blank" 
+                                              rel="noopener noreferrer"
+                                              className="flex items-center gap-1.5 bg-white text-black px-3 py-1.5 rounded-full text-[10px] font-bold hover:bg-neutral-200 transition-colors shadow-sm group"
+                                          >
+                                              <div className="w-3 h-3 bg-contain bg-center bg-no-repeat" style={{backgroundImage: 'url("https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg")'}}></div>
+                                              Search {msg.googleQuery}
+                                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-neutral-500 group-hover:text-black">
+                                                <path fillRule="evenodd" d="M5.22 14.78a.75.75 0 001.06 0l7.22-7.22v5.69a.75.75 0 001.5 0v-7.5a.75.75 0 00-.75-.75h-7.5a.75.75 0 000 1.5h5.69l-7.22 7.22a.75.75 0 000 1.06z" clipRule="evenodd" />
+                                              </svg>
+                                          </a>
+                                      </div>
+                                  )}
                               </div>
                           </div>
                       ))}
+                      
+                      {isTyping && (
+                          <div className="flex justify-start">
+                              <div className="p-3 bg-neutral-800/80 backdrop-blur-md rounded-2xl rounded-tl-none border border-white/10 flex gap-1">
+                                  <div className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce" style={{animationDelay: '0ms'}}></div>
+                                  <div className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce" style={{animationDelay: '150ms'}}></div>
+                                  <div className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce" style={{animationDelay: '300ms'}}></div>
+                              </div>
+                          </div>
+                      )}
+                      
                       <div ref={messagesEndRef} />
                   </div>
                   <form onSubmit={handleHelperSubmit} className="p-3 border-t border-white/5 flex gap-2">
-                      <input type="text" placeholder="Ask about products..." className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-white/30" value={helperInput} onChange={e => setHelperInput(e.target.value)} />
-                      <button type="submit" className="p-2 bg-white text-black rounded-xl hover:bg-neutral-200 transition-colors">
+                      <input type="text" placeholder="Ask Aske..." disabled={isTyping} className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-white/30 disabled:opacity-50" value={helperInput} onChange={e => setHelperInput(e.target.value)} />
+                      <button type="submit" disabled={isTyping} className="p-3 bg-white text-black rounded-xl hover:bg-neutral-200 transition-colors disabled:opacity-50">
                           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" /></svg>
                       </button>
                   </form>
@@ -447,7 +522,6 @@ const AskeChatbot: React.FC = () => {
                         </div>
                       )}
 
-                      {/* Success/Fail Cards */}
                       {verifyStep === 'success' && (
                         <div className="p-6 bg-emerald-950/30 border border-emerald-500/30 rounded-2xl flex flex-col items-center text-center animate-in zoom-in duration-500">
                             <div className="w-12 h-12 rounded-full bg-emerald-500 text-black flex items-center justify-center mb-3 shadow-[0_0_20px_rgba(16,185,129,0.3)]"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg></div>

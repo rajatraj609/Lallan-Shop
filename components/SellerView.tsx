@@ -213,13 +213,22 @@ const SellerView: React.FC<Props> = ({ user }) => {
                     <div className="space-y-3">
                     {products.map(p => (
                         <div key={p.id} className="group bg-neutral-950 border border-white/5 p-5 rounded-2xl flex justify-between items-center hover:border-white/20 transition-all">
-                            <div>
-                            <h4 className="font-medium text-white mb-1 group-hover:text-neutral-200">{p.name}</h4>
-                            <div className="flex gap-2">
-                                <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded border ${p.isSerialized ? 'border-blue-500/30 text-blue-400' : 'border-amber-500/30 text-amber-400'}`}>
-                                    {p.isSerialized ? 'Serialized' : 'Bulk'}
-                                </span>
-                            </div>
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 bg-black/40 rounded-lg overflow-hidden border border-white/5">
+                                    {p.images && p.images.length > 0 ? (
+                                        <img src={p.images[0]} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center font-bold text-neutral-700">L</div>
+                                    )}
+                                </div>
+                                <div>
+                                    <h4 className="font-medium text-white mb-1 group-hover:text-neutral-200">{p.name}</h4>
+                                    <div className="flex gap-2">
+                                        <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded border ${p.isSerialized ? 'border-blue-500/30 text-blue-400' : 'border-amber-500/30 text-amber-400'}`}>
+                                            {p.isSerialized ? 'Serialized' : 'Bulk'}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
                             <div className="text-right">
                             <span className="block text-2xl font-display font-bold text-white">{p.quantity}</span>
