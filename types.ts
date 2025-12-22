@@ -129,4 +129,12 @@ export interface GlobalSettings {
   serialRangeStart: number;
   serialRangeEnd: number;
   recycledSerials: number[]; // Numbers that were deleted and can be reused
+  systemMessages: string[]; // Array of up to 3 strings for Home Page announcements
+  
+  // Website Content (HTML strings containing text and base64 images)
+  contentHowItWorks?: string;
+  contentOurStory?: string;
+  contentSupport?: string;
+  contentPrivacy?: string;
+  contentTerms?: string;
 }

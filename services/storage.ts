@@ -22,13 +22,29 @@ export const generateId = (): string => {
 
 export const getGlobalSettings = (): GlobalSettings => {
   const stored = localStorage.getItem(SETTINGS_KEY);
-  if (stored) return JSON.parse(stored);
-  // Default values
-  return {
-    serialRangeStart: 100000,
-    serialRangeEnd: 100999,
-    recycledSerials: []
-  };
+  let parsed: GlobalSettings;
+  
+  if (stored) {
+      parsed = JSON.parse(stored);
+  } else {
+      parsed = {
+        serialRangeStart: 100000,
+        serialRangeEnd: 100999,
+        recycledSerials: [],
+        systemMessages: ['', '', '']
+      };
+  }
+
+  // Ensure default structure exists for backwards compatibility
+  if (!parsed.systemMessages) parsed.systemMessages = ['', '', ''];
+  
+  if (!parsed.contentHowItWorks) parsed.contentHowItWorks = "1. Sign Up as a Manufacturer, Seller, or Buyer.\n2. Manufacturers create digital twins of physical luxury items.\n3. Sellers receive and list verified stock.\n4. Buyers purchase authentic goods with a traceable history.";
+  if (!parsed.contentOurStory) parsed.contentOurStory = "Founded in 2024, Lallan Shop was built to solve the counterfeit crisis in luxury retail. By leveraging cryptographic serials and a closed-loop supply chain, we ensure that what you buy is exactly what you get.";
+  if (!parsed.contentSupport) parsed.contentSupport = "Contact our 24/7 concierge at support@lallanshop.com or use the 'Lallan Intelligence' bot after logging in for immediate assistance with orders and verification.";
+  if (!parsed.contentPrivacy) parsed.contentPrivacy = "We value your privacy. Your personal data is encrypted and never shared with third-party advertisers. We only store data necessary for order fulfillment and identity verification.";
+  if (!parsed.contentTerms) parsed.contentTerms = "By using Lallan Shop, you agree to our anti-fraud policies. Any attempt to tamper with QR codes or resell items outside the platform voids the authenticity guarantee.";
+
+  return parsed;
 };
 
 export const saveGlobalSettings = (settings: GlobalSettings): void => {
