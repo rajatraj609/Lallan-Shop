@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { User, Product, UserRole, ProductUnit } from '../types';
-import { getUsers, toggleUserBan, approveUser, rejectUser, getProducts, deleteProduct, getGlobalSettings, saveGlobalSettings, getProductUnits } from '../services/storage';
+import { User, UserRole, ProductUnit } from '../types';
+import { getUsers, toggleUserBan, approveUser, rejectUser, getGlobalSettings, saveGlobalSettings, getProductUnits } from '../services/storage';
 import RichTextEditor from './RichTextEditor';
 
 interface Props {
@@ -8,9 +8,8 @@ interface Props {
 }
 
 const AdminView: React.FC<Props> = ({ user }) => {
-  const [activeTab, setActiveTab] = useState<'users' | 'products' | 'config'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'config'>('users');
   const [allUsers, setAllUsers] = useState<User[]>([]);
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
@@ -34,7 +33,6 @@ const AdminView: React.FC<Props> = ({ user }) => {
 
   const refreshData = () => {
     setAllUsers(getUsers().filter(u => u.role !== UserRole.ADMIN));
-    setAllProducts(getProducts());
     setAllUnits(getProductUnits());
     
     const settings = getGlobalSettings();
@@ -76,13 +74,6 @@ const AdminView: React.FC<Props> = ({ user }) => {
       }
   };
 
-  const handleDeleteProduct = (productId: string) => {
-      if (confirm("Are you sure? This will delete the product, its stock, and unit history permanently.")) {
-          deleteProduct(productId);
-          refreshData();
-      }
-  };
-
   const handleSaveSettings = () => {
       if (rangeEnd <= rangeStart) {
           alert("End range must be greater than start range.");
@@ -119,24 +110,20 @@ const AdminView: React.FC<Props> = ({ user }) => {
 
   return (
     <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-8 duration-700">
-       <div className="flex justify-between items-center mb-10">
-          <h1 className="text-3xl font-display font-bold text-white">Central Command</h1>
-          <div className="bg-neutral-900 border border-white/10 p-1 rounded-full flex">
+       <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+          <h1 className="text-2xl md:text-3xl font-display font-bold text-white text-center md:text-left">Central Command</h1>
+          
+          {/* Navigation - Optimized for Mobile */}
+          <div className="bg-neutral-900 border border-white/10 p-1 rounded-full flex w-full md:w-auto overflow-x-auto no-scrollbar justify-center">
               <button 
                 onClick={() => setActiveTab('users')}
-                className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${activeTab === 'users' ? 'bg-white text-black' : 'text-neutral-400 hover:text-white'}`}
+                className={`flex-1 md:flex-none px-4 py-2 rounded-full text-xs md:text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'users' ? 'bg-white text-black shadow-md' : 'text-neutral-400 hover:text-white'}`}
               >
                   User Management
               </button>
               <button 
-                onClick={() => setActiveTab('products')}
-                className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${activeTab === 'products' ? 'bg-white text-black' : 'text-neutral-400 hover:text-white'}`}
-              >
-                  Product Moderation
-              </button>
-              <button 
                 onClick={() => setActiveTab('config')}
-                className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${activeTab === 'config' ? 'bg-white text-black' : 'text-neutral-400 hover:text-white'}`}
+                className={`flex-1 md:flex-none px-4 py-2 rounded-full text-xs md:text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'config' ? 'bg-white text-black shadow-md' : 'text-neutral-400 hover:text-white'}`}
               >
                   System Config
               </button>
@@ -219,28 +206,6 @@ const AdminView: React.FC<Props> = ({ user }) => {
                        </tbody>
                    </table>
                </div>
-           </div>
-       )}
-
-       {activeTab === 'products' && (
-           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-               {allProducts.map(p => (
-                   <div key={p.id} className="bg-neutral-900 border border-white/5 p-6 rounded-3xl relative group">
-                       <h3 className="text-white font-bold text-lg mb-1">{p.name}</h3>
-                       <p className="text-neutral-500 text-xs uppercase tracking-widest mb-4">ID: {p.id.substring(0,8)}</p>
-                       <div className="flex items-center justify-between mt-4 border-t border-white/5 pt-4">
-                           <span className={`text-[10px] px-2 py-1 rounded border ${p.isSerialized ? 'border-blue-500/30 text-blue-400' : 'border-amber-500/30 text-amber-400'}`}>
-                               {p.isSerialized ? 'Serialized' : 'Bulk'}
-                           </span>
-                           <button 
-                             onClick={() => handleDeleteProduct(p.id)}
-                             className="text-red-400 hover:text-white text-xs font-bold bg-red-900/20 hover:bg-red-600 hover:border-red-500 border border-red-500/20 px-4 py-2 rounded-lg transition-all"
-                           >
-                               Delete Item
-                           </button>
-                       </div>
-                   </div>
-               ))}
            </div>
        )}
 
