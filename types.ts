@@ -1,3 +1,4 @@
+
 export enum UserRole {
   MANUFACTURER = 'Manufacturer',
   SELLER = 'Seller',
@@ -33,8 +34,9 @@ export interface Message {
   text: string;
   timestamp: string;
   isRead: boolean;
-  isClosed?: boolean; // For "End Discussion"
-  attachmentUrl?: string; // For screenshots (base64)
+  type?: 'text' | 'system'; // New field to distinguish normal chats from system events
+  isClosed?: boolean; 
+  attachmentUrl?: string; 
 }
 
 export type UnitStatus = 

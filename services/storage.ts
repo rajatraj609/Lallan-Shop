@@ -269,14 +269,13 @@ export const markMessageAsRead = (messageId: string): void => {
 };
 
 export const endDiscussion = (senderId: string, receiverId: string): void => {
-    const messages = getMessages();
-    // Mark all messages between these two as closed
-    messages.forEach(m => {
-        if ((m.senderId === senderId && m.receiverId === receiverId) || 
-            (m.senderId === receiverId && m.receiverId === senderId)) {
-            m.isClosed = true;
-        }
-    });
+    let messages = getMessages();
+    // PERMANENT DELETION: Remove all messages between these two users
+    messages = messages.filter(m => !((m.senderId === senderId && m.receiverId === receiverId) || 
+                                      (m.senderId === receiverId && m.receiverId === senderId)));
+    
+    // No placeholder. Clean wipe.
+    
     localStorage.setItem(MESSAGES_KEY, JSON.stringify(messages));
 };
 
