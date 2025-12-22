@@ -7,12 +7,43 @@ const BULK_STOCK_KEY = 'chaintrack_bulk_stock'; // New Key
 const ORDERS_KEY = 'chaintrack_orders';
 const CURRENT_USER_KEY = 'chaintrack_current_user';
 const CART_KEY_PREFIX = 'chaintrack_cart_';
+const SYSTEM_SECRET_KEY = 'LALLAN-ASKE-V1-SECRET'; // In prod, this would be env variable
 
 export const generateId = (): string => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
   }
   return Date.now().toString(36) + Math.random().toString(36).substring(2);
+};
+
+// --- Security / Aske Logic ---
+
+export const generateSecureHash = async (serialNumber: string, manufacturerId: string): Promise<string> => {
+    // Formula: SHA-256(SerialNumber + ManufacturerID + SystemKey)
+    const data = `${serialNumber}-${manufacturerId}-${SYSTEM_SECRET_KEY}`;
+    const encoder = new TextEncoder();
+    const dataBuffer = encoder.encode(data);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    // Convert to Hex and take first 16 chars for a "Code" style, or full hash
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
+export const verifyProductIdentity = async (qrSerialNumber: string, inputAuthCode: string): Promise<{valid: boolean, unit?: ProductUnit}> => {
+    const units = getProductUnits();
+    const unit = units.find(u => u.serialNumber === qrSerialNumber);
+    
+    if (!unit || !unit.uniqueAuthHash) {
+        return { valid: false };
+    }
+
+    // Since we store the hash, we compare the input directly against the stored hash
+    // The InputAuthCode PROVIDED by the user IS the hash (retrieved from their dashboard)
+    if (unit.uniqueAuthHash === inputAuthCode) {
+        return { valid: true, unit };
+    }
+    
+    return { valid: false };
 };
 
 // --- User Management ---
@@ -36,6 +67,15 @@ export const saveUser = (user: User): void => {
   if (currentUser && currentUser.id === user.id) {
     localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
   }
+};
+
+export const resetPassword = (userId: string, newPassword: string): void => {
+    const users = getUsers();
+    const index = users.findIndex(u => u.id === userId);
+    if (index >= 0) {
+        users[index].password = newPassword;
+        localStorage.setItem(USERS_KEY, JSON.stringify(users));
+    }
 };
 
 export const deleteUser = (userId: string): void => {
@@ -88,7 +128,7 @@ export const getBulkStock = (): BulkStock[] => {
   return stored ? JSON.parse(stored) : [];
 };
 
-export const saveProductBatch = (product: Product, quantity: number, units: ProductUnit[]): void => {
+export const saveProductBatch = async (product: Product, quantity: number, partialUnits: Partial<ProductUnit>[]): Promise<void> => {
   const products = getProducts();
   
   // Update or Add Product definition
@@ -99,9 +139,22 @@ export const saveProductBatch = (product: Product, quantity: number, units: Prod
   localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
 
   if (product.isSerialized) {
-    // Add Serialized Units
     const allUnits = getProductUnits();
-    units.forEach(u => allUnits.push(u));
+    
+    // Process units to generate hashes asynchronously
+    const finalUnits: ProductUnit[] = [];
+    
+    for (const u of partialUnits) {
+        if (u.serialNumber && u.manufacturerId) {
+             const hash = await generateSecureHash(u.serialNumber, u.manufacturerId);
+             finalUnits.push({
+                 ...u,
+                 uniqueAuthHash: hash
+             } as ProductUnit);
+        }
+    }
+
+    finalUnits.forEach(u => allUnits.push(u));
     localStorage.setItem(UNITS_KEY, JSON.stringify(allUnits));
   } else {
     // Add Bulk Stock

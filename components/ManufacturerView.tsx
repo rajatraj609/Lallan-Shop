@@ -16,6 +16,7 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
   const [qty, setQty] = useState(1);
   const [mfgDate, setMfgDate] = useState(new Date().toISOString().split('T')[0]);
   const [serialNumbers, setSerialNumbers] = useState<string[]>(['']);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // --- DISTRIBUTION STATE ---
   const [distMode, setDistMode] = useState<'new' | 'history'>('new');
@@ -74,12 +75,14 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
     setSerialNumbers(newArr);
   };
 
-  const handleProductionSubmit = (e: React.FormEvent) => {
+  const handleProductionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSerialized && serialNumbers.some(s => !s.trim())) {
       alert("Please fill in all Serial Numbers.");
       return;
     }
+    
+    setIsSubmitting(true);
 
     const productId = generateId();
     const product: Product = {
@@ -89,7 +92,7 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
       isSerialized: isSerialized
     };
 
-    const units: ProductUnit[] = isSerialized ? serialNumbers.map(sn => ({
+    const units: Partial<ProductUnit>[] = isSerialized ? serialNumbers.map(sn => ({
       id: generateId(),
       productId: productId,
       serialNumber: sn,
@@ -98,13 +101,15 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
       manufacturingDate: mfgDate
     })) : [];
 
-    saveProductBatch(product, qty, units);
+    // Await the async hash generation inside storage
+    await saveProductBatch(product, qty, units);
     
+    setIsSubmitting(false);
     // Reset
     setProdName('');
     setIsSerialized(true);
     handleQtyChange(1); // Resets SN array
-    alert("Production batch registered successfully.");
+    alert("Production batch registered successfully with Secure Anti-Counterfeit Hashes.");
   };
 
   // --- DISTRIBUTION LOGIC ---
@@ -317,7 +322,7 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
               activeTab === 'inventory' ? 'bg-white text-black shadow-lg' : 'text-neutral-400 hover:text-white'
             }`}
           >
-            Inventory
+            Inventory & QR
           </button>
           <button
             onClick={() => setActiveTab('distribute')}
@@ -334,7 +339,7 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
         <div className="bg-neutral-900/50 backdrop-blur border border-white/5 rounded-3xl p-8">
            <div className="mb-8 border-b border-white/5 pb-4">
              <h2 className="text-2xl font-display font-bold text-white mb-1">Batch Production</h2>
-             <p className="text-neutral-500 text-sm">Register new inventory and define individual serial numbers.</p>
+             <p className="text-neutral-500 text-sm">Register inventory. Serialized items will generate secure 'Aske' Verification Hashes automatically.</p>
            </div>
 
            <form onSubmit={handleProductionSubmit} className="space-y-6">
@@ -432,8 +437,12 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
                 </div>
               )}
 
-              <button type="submit" className="w-full py-4 bg-white text-black font-display font-bold rounded-xl hover:bg-neutral-200 transition-colors shadow-lg">
-                Register Batch
+              <button 
+                type="submit" 
+                disabled={isSubmitting}
+                className="w-full py-4 bg-white text-black font-display font-bold rounded-xl hover:bg-neutral-200 transition-colors shadow-lg disabled:opacity-50"
+              >
+                {isSubmitting ? 'Generating Hash Keys...' : 'Register Batch'}
               </button>
            </form>
         </div>
@@ -441,7 +450,7 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
 
       {activeTab === 'inventory' && (
           <div className="bg-neutral-900/50 backdrop-blur border border-white/5 rounded-3xl p-6">
-             <h2 className="text-lg font-display font-bold text-white mb-6">Product Management</h2>
+             <h2 className="text-lg font-display font-bold text-white mb-6">Product Management & QR Generation</h2>
              
              <div className="space-y-4">
                  {inventoryProducts.length === 0 ? (
@@ -475,7 +484,7 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
                                             onClick={() => toggleExpandProduct(p.id)}
                                             className="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg transition-colors"
                                         >
-                                            {expandedProductId === p.id ? 'Hide Units' : 'Manage Units'}
+                                            {expandedProductId === p.id ? 'Hide Codes' : 'Show QR Codes'}
                                         </button>
                                      )}
                                      <button 
@@ -490,26 +499,42 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
                              {/* Expanded Serial Numbers */}
                              {p.isSerialized && expandedProductId === p.id && (
                                  <div className="border-t border-white/5 bg-neutral-950/50 p-4">
-                                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                          {expandedProductUnits.map(unit => (
-                                             <div key={unit.id} className="flex items-center justify-between p-3 rounded-xl bg-neutral-900 border border-white/5">
-                                                 <div>
-                                                     <p className="font-mono text-xs text-white">{unit.serialNumber}</p>
-                                                     <span className={`text-[10px] uppercase font-bold tracking-wider ${
-                                                         unit.status === 'RETURNED_DEFECTIVE' ? 'text-red-400' :
-                                                         unit.status === 'IN_FACTORY' ? 'text-blue-400' : 'text-neutral-500'
-                                                     }`}>
-                                                         {unit.status.replace(/_/g, ' ')}
-                                                     </span>
+                                             <div key={unit.id} className="flex flex-col p-4 rounded-xl bg-neutral-900 border border-white/5 relative group">
+                                                 <div className="flex justify-between items-start mb-3">
+                                                     <div>
+                                                         <p className="font-mono text-sm font-bold text-white">{unit.serialNumber}</p>
+                                                         <p className="text-[10px] text-neutral-500 uppercase mt-1">Status: {unit.status.replace(/_/g, ' ')}</p>
+                                                     </div>
+                                                     <div className="bg-white p-1 rounded-sm">
+                                                        {/* QR Code simulating a link to verify */}
+                                                        <img 
+                                                            src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${unit.serialNumber}`} 
+                                                            alt="QR" 
+                                                            className="w-12 h-12"
+                                                        />
+                                                     </div>
                                                  </div>
+                                                 
+                                                 {unit.uniqueAuthHash && (
+                                                     <div className="mt-2 pt-2 border-t border-white/5">
+                                                         <p className="text-[9px] uppercase text-neutral-500 mb-1">Secret Auth Code (Print Only)</p>
+                                                         <div className="bg-black/50 p-1.5 rounded font-mono text-[10px] text-emerald-400 break-all border border-emerald-900/30">
+                                                             {unit.uniqueAuthHash}
+                                                         </div>
+                                                     </div>
+                                                 )}
+                                                 
                                                  {/* Allow deletion only if in factory or returned defective */}
                                                  {['IN_FACTORY', 'RETURNED_DEFECTIVE'].includes(unit.status) && (
                                                      <button 
                                                        onClick={() => handleDeleteUnit(unit.id)}
-                                                       className="text-neutral-500 hover:text-red-400"
+                                                       className="absolute top-2 right-2 p-1 bg-red-900/20 rounded-full text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                       title="Delete Unit"
                                                      >
-                                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                                                           <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3">
+                                                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                                                          </svg>
                                                      </button>
                                                  )}
@@ -634,7 +659,7 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
 
       {/* Add to Cart Modal (Replaces Prompt) */}
       {selectedProductForCart && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
            <div className="bg-neutral-900 border border-white/10 rounded-3xl w-full max-w-lg p-6 shadow-2xl flex flex-col max-h-[80vh]">
               <h3 className="text-lg font-bold text-white mb-2">Add to Cart</h3>
               <p className="text-sm text-neutral-400 mb-6">Select inventory for <span className="text-white font-medium">{selectedProductForCart.name}</span></p>

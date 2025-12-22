@@ -31,6 +31,9 @@ export interface ProductUnit {
   serialNumber: string;
   status: UnitStatus;
   
+  // Anti-Counterfeit (Aske System)
+  uniqueAuthHash?: string; // SHA-256 Hash
+  
   // Traceability
   manufacturerId: string;
   sellerId?: string;

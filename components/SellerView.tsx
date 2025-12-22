@@ -352,7 +352,7 @@ const SellerView: React.FC<Props> = ({ user }) => {
 
       {/* FULFILLMENT MODAL */}
       {activeOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
            <div className="bg-neutral-900 border border-white/10 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh]">
               <div className="p-6 border-b border-white/5 bg-white/5 flex justify-between items-center">
                  <div>

@@ -6,6 +6,7 @@ import ManufacturerView from './components/ManufacturerView';
 import SellerView from './components/SellerView';
 import BuyerView from './components/BuyerView';
 import ProfileModal from './components/ProfileModal';
+import AskeChatbot from './components/AskeChatbot';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -112,6 +113,9 @@ function App() {
           onLogout={handleLogout}
         />
       )}
+
+      {/* Aske Verification Bot */}
+      <AskeChatbot />
     </div>
   );
 }

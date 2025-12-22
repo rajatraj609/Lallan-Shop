@@ -1,19 +1,32 @@
 import React, { useState } from 'react';
 import { User, UserRole } from '../types';
-import { saveUser, findUserByEmail, login, generateId } from '../services/storage';
+import { saveUser, findUserByEmail, login, generateId, resetPassword } from '../services/storage';
 import PasswordStrength from './PasswordStrength';
 
 interface Props {
   onLogin: (user: User) => void;
 }
 
+type AuthMode = 'LOGIN' | 'SIGNUP' | 'RECOVERY_VERIFY' | 'RECOVERY_RESET';
+
 const Auth: React.FC<Props> = ({ onLogin }) => {
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
-  const [isLogin, setIsLogin] = useState(true);
+  const [authMode, setAuthMode] = useState<AuthMode>('LOGIN');
   
+  // Form States
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  
+  // New Fields for Signup & Recovery
+  const [phone, setPhone] = useState('');
+  const [dob, setDob] = useState('');
+  
+  // Reset Password Specifics
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  
+  // Validation States
   const [isPasswordValid, setIsPasswordValid] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -22,9 +35,58 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
     setSelectedRole(role);
     setError('');
     setSuccessMsg('');
-    setIsLogin(true); // Default to login when selecting a portal
+    setAuthMode('LOGIN');
+    resetForm();
+  };
+
+  const resetForm = () => {
     setEmail('');
     setPassword('');
+    setName('');
+    setPhone('');
+    setDob('');
+    setNewPassword('');
+    setConfirmNewPassword('');
+  };
+
+  const handleRecoveryVerify = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    
+    const user = findUserByEmail(email);
+    
+    // Strict Verification: Check if User exists AND Phone matches AND DOB matches
+    if (user && user.phone === phone && user.dob === dob) {
+        setSuccessMsg('Identity verified. Please set a new password.');
+        setAuthMode('RECOVERY_RESET');
+    } else {
+        // Generic error for security
+        setError('Verification failed. Details do not match our records.');
+    }
+  };
+
+  const handlePasswordReset = (e: React.FormEvent) => {
+      e.preventDefault();
+      setError('');
+
+      if (!isPasswordValid) {
+          setError('New password does not meet strength requirements.');
+          return;
+      }
+      if (newPassword !== confirmNewPassword) {
+          setError('Passwords do not match.');
+          return;
+      }
+
+      const user = findUserByEmail(email);
+      if (user) {
+          resetPassword(user.id, newPassword);
+          setSuccessMsg('Password reset successful. Please login.');
+          setAuthMode('LOGIN');
+          setPassword(''); // Clear fields
+      } else {
+          setError('An unexpected error occurred.');
+      }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -32,21 +94,19 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
     setError('');
     setSuccessMsg('');
 
-    if (isLogin) {
+    if (authMode === 'LOGIN') {
       const user = findUserByEmail(email);
       if (user && user.password === password) {
-        // Enforce that the user logs in through the correct portal
         if (selectedRole && user.role !== selectedRole) {
             setError(`Account found, but it is registered as ${user.role}. Please switch portals.`);
             return;
         }
-
         login(user);
         onLogin(user);
       } else {
         setError('Invalid credentials.');
       }
-    } else {
+    } else if (authMode === 'SIGNUP') {
       if (!isPasswordValid) {
         setError('Password strength requirement not met.');
         return;
@@ -56,20 +116,38 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
         return;
       }
 
+      // Basic Validation for new mandatory fields
+      if (!phone || !dob) {
+          setError('Phone number and Date of Birth are required.');
+          return;
+      }
+
       const newUser: User = {
         id: generateId(),
         email,
         password,
-        role: selectedRole!, // We know selectedRole is set here
-        name
+        role: selectedRole!,
+        name,
+        phone,
+        dob
       };
 
       saveUser(newUser);
-      setIsLogin(true);
+      setAuthMode('LOGIN');
       setSuccessMsg('Registration successful. Welcome to Lallan Shop.');
-      setPassword('');
+      resetForm();
     }
   };
+
+  const renderHeader = () => {
+      switch(authMode) {
+          case 'LOGIN': return 'Welcome Back';
+          case 'SIGNUP': return 'Join Our Group';
+          case 'RECOVERY_VERIFY': return 'Identity Verification';
+          case 'RECOVERY_RESET': return 'Reset Credentials';
+          default: return '';
+      }
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
@@ -146,96 +224,233 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
                 </div>
              </div>
           ) : (
-            // --- AUTH FORM VIEW ---
+            // --- AUTH & RECOVERY FORM VIEW ---
             <div className="animate-in slide-in-from-right-8 duration-500">
               
-              {/* Back Button */}
-              <button onClick={() => setSelectedRole(null)} className="flex items-center gap-2 text-xs text-neutral-500 hover:text-white mb-6 transition-colors group">
-                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 group-hover:-translate-x-1 transition-transform">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-                   </svg>
-                   Switch Portal
-               </button>
+              {/* Navigation Back Buttons */}
+              <div className="flex justify-between items-center mb-6">
+                  <button onClick={() => setSelectedRole(null)} className="flex items-center gap-2 text-xs text-neutral-500 hover:text-white transition-colors group">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 group-hover:-translate-x-1 transition-transform">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                    </svg>
+                    Switch Portal
+                  </button>
+
+                  {(authMode === 'RECOVERY_VERIFY' || authMode === 'RECOVERY_RESET') && (
+                      <button onClick={() => { setAuthMode('LOGIN'); resetForm(); }} className="text-xs text-neutral-400 hover:text-white transition-colors">
+                          Back to Login
+                      </button>
+                  )}
+              </div>
 
               <div className="flex justify-between items-center mb-6">
                 <div>
                     <h2 className="text-2xl font-display font-semibold text-white">
-                    {isLogin ? 'Welcome Back' : 'Join Our Group'}
+                        {renderHeader()}
                     </h2>
                     <p className="text-xs text-neutral-500 mt-1 uppercase tracking-wider">{selectedRole} Portal</p>
                 </div>
-                <div className="flex bg-neutral-900 rounded-full p-1 border border-white/10">
-                  <button
-                    onClick={() => { setIsLogin(true); setError(''); setSuccessMsg(''); }}
-                    className={`px-4 py-1.5 text-xs font-medium rounded-full transition-all duration-300 ${isLogin ? 'bg-white text-black' : 'text-neutral-400 hover:text-white'}`}
-                  >
-                    Login
-                  </button>
-                  <button
-                    onClick={() => { setIsLogin(false); setError(''); setSuccessMsg(''); }}
-                    className={`px-4 py-1.5 text-xs font-medium rounded-full transition-all duration-300 ${!isLogin ? 'bg-white text-black' : 'text-neutral-400 hover:text-white'}`}
-                  >
-                    Sign Up
-                  </button>
-                </div>
+                
+                {(authMode === 'LOGIN' || authMode === 'SIGNUP') && (
+                    <div className="flex bg-neutral-900 rounded-full p-1 border border-white/10">
+                    <button
+                        onClick={() => { setAuthMode('LOGIN'); setError(''); setSuccessMsg(''); }}
+                        className={`px-4 py-1.5 text-xs font-medium rounded-full transition-all duration-300 ${authMode === 'LOGIN' ? 'bg-white text-black' : 'text-neutral-400 hover:text-white'}`}
+                    >
+                        Login
+                    </button>
+                    <button
+                        onClick={() => { setAuthMode('SIGNUP'); setError(''); setSuccessMsg(''); }}
+                        className={`px-4 py-1.5 text-xs font-medium rounded-full transition-all duration-300 ${authMode === 'SIGNUP' ? 'bg-white text-black' : 'text-neutral-400 hover:text-white'}`}
+                    >
+                        Sign Up
+                    </button>
+                    </div>
+                )}
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-6">
-                {!isLogin && (
-                  <div className="space-y-4 animate-in slide-in-from-right-4 fade-in duration-300">
+              {/* RECOVERY VERIFICATION FORM */}
+              {authMode === 'RECOVERY_VERIFY' && (
+                  <form onSubmit={handleRecoveryVerify} className="space-y-5 animate-in fade-in duration-300">
+                      <p className="text-sm text-neutral-400">To reset your password, please verify your identity using your registered details.</p>
+                      <div>
+                        <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Registered Email</label>
+                        <input
+                            type="email"
+                            required
+                            className="w-full px-4 py-3 bg-neutral-900/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition"
+                            placeholder="name@lallanshop.com"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Phone Number</label>
+                              <input
+                                  type="tel"
+                                  required
+                                  className="w-full px-4 py-3 bg-neutral-900/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition"
+                                  placeholder="1234567890"
+                                  value={phone}
+                                  onChange={(e) => setPhone(e.target.value)}
+                              />
+                          </div>
+                          <div>
+                              <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Date of Birth</label>
+                              <input
+                                  type="date"
+                                  required
+                                  className="w-full px-4 py-3 bg-neutral-900/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition [color-scheme:dark]"
+                                  value={dob}
+                                  onChange={(e) => setDob(e.target.value)}
+                              />
+                          </div>
+                      </div>
+                      
+                      {error && <p className="text-red-400 text-xs text-center py-2 bg-red-900/10 border border-red-500/20 rounded-lg">{error}</p>}
+                      
+                      <button type="submit" className="w-full py-4 bg-white text-black font-bold font-display rounded-xl hover:bg-neutral-200 transition-all transform active:scale-[0.99] tracking-wide">
+                        Verify Identity
+                      </button>
+                  </form>
+              )}
+
+              {/* RECOVERY RESET FORM */}
+              {authMode === 'RECOVERY_RESET' && (
+                  <form onSubmit={handlePasswordReset} className="space-y-5 animate-in fade-in duration-300">
+                      <div className="p-4 bg-emerald-900/10 border border-emerald-500/20 rounded-xl mb-4">
+                          <p className="text-emerald-400 text-xs text-center">{successMsg}</p>
+                      </div>
+
+                      <div>
+                          <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">New Password</label>
+                          <input
+                            type="password"
+                            required
+                            className="w-full px-4 py-3 bg-neutral-900/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition"
+                            placeholder="••••••••"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                          />
+                          <div className="mt-3">
+                              <PasswordStrength password={newPassword} onValidationChange={setIsPasswordValid} />
+                          </div>
+                      </div>
+
+                      <div>
+                          <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Confirm New Password</label>
+                          <input
+                            type="password"
+                            required
+                            className="w-full px-4 py-3 bg-neutral-900/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition"
+                            placeholder="••••••••"
+                            value={confirmNewPassword}
+                            onChange={(e) => setConfirmNewPassword(e.target.value)}
+                          />
+                      </div>
+
+                      {error && <p className="text-red-400 text-xs text-center py-2 bg-red-900/10 border border-red-500/20 rounded-lg">{error}</p>}
+
+                      <button type="submit" className="w-full py-4 bg-white text-black font-bold font-display rounded-xl hover:bg-neutral-200 transition-all transform active:scale-[0.99] tracking-wide">
+                        Reset Password
+                      </button>
+                  </form>
+              )}
+
+
+              {/* LOGIN & SIGNUP FORMS */}
+              {(authMode === 'LOGIN' || authMode === 'SIGNUP') && (
+                  <form onSubmit={handleSubmit} className="space-y-6 animate-in fade-in duration-300">
+                    {authMode === 'SIGNUP' && (
+                      <div className="space-y-4 animate-in slide-in-from-right-4 fade-in duration-300">
+                        <div>
+                          <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Full Name</label>
+                          <input
+                            type="text"
+                            required
+                            className="w-full px-4 py-3 bg-neutral-900/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition placeholder-neutral-600"
+                            placeholder="Enter your name"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                             <div>
+                                <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Phone</label>
+                                <input
+                                    type="tel"
+                                    required
+                                    className="w-full px-4 py-3 bg-neutral-900/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition placeholder-neutral-600"
+                                    placeholder="123 456 7890"
+                                    value={phone}
+                                    onChange={(e) => setPhone(e.target.value)}
+                                />
+                             </div>
+                             <div>
+                                <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Date of Birth</label>
+                                <input
+                                    type="date"
+                                    required
+                                    className="w-full px-4 py-3 bg-neutral-900/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition [color-scheme:dark]"
+                                    value={dob}
+                                    onChange={(e) => setDob(e.target.value)}
+                                />
+                             </div>
+                        </div>
+                      </div>
+                    )}
+
                     <div>
-                      <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Full Name</label>
+                      <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Email Address</label>
                       <input
-                        type="text"
+                        type="email"
                         required
                         className="w-full px-4 py-3 bg-neutral-900/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition placeholder-neutral-600"
-                        placeholder="Enter your name"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
+                        placeholder="name@lallanshop.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
                       />
                     </div>
-                  </div>
-                )}
 
-                <div>
-                  <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Email Address</label>
-                  <input
-                    type="email"
-                    required
-                    className="w-full px-4 py-3 bg-neutral-900/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition placeholder-neutral-600"
-                    placeholder="name@lallanshop.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Password</label>
-                  <input
-                    type="password"
-                    required
-                    className="w-full px-4 py-3 bg-neutral-900/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition placeholder-neutral-600"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                  {!isLogin && (
-                    <div className="mt-3">
-                       <PasswordStrength password={password} onValidationChange={setIsPasswordValid} />
+                    <div>
+                      <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-2">Password</label>
+                      <input
+                        type="password"
+                        required
+                        className="w-full px-4 py-3 bg-neutral-900/50 border border-white/10 text-white rounded-xl focus:border-white/40 focus:ring-0 outline-none transition placeholder-neutral-600"
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                      />
+                      {authMode === 'SIGNUP' ? (
+                        <div className="mt-3">
+                          <PasswordStrength password={password} onValidationChange={setIsPasswordValid} />
+                        </div>
+                      ) : (
+                          <div className="flex justify-end mt-2">
+                              <button 
+                                type="button" 
+                                onClick={() => { setAuthMode('RECOVERY_VERIFY'); setError(''); setSuccessMsg(''); }}
+                                className="text-xs text-neutral-500 hover:text-white transition-colors"
+                              >
+                                  Forgot Password?
+                              </button>
+                          </div>
+                      )}
                     </div>
-                  )}
-                </div>
 
-                {error && <p className="text-red-400 text-xs text-center py-2 bg-red-900/10 border border-red-500/20 rounded-lg">{error}</p>}
-                {successMsg && <p className="text-emerald-400 text-xs text-center py-2 bg-emerald-900/10 border border-emerald-500/20 rounded-lg">{successMsg}</p>}
+                    {error && <p className="text-red-400 text-xs text-center py-2 bg-red-900/10 border border-red-500/20 rounded-lg">{error}</p>}
+                    {successMsg && <p className="text-emerald-400 text-xs text-center py-2 bg-emerald-900/10 border border-emerald-500/20 rounded-lg">{successMsg}</p>}
 
-                <button
-                  type="submit"
-                  className="w-full py-4 bg-white text-black font-bold font-display rounded-xl hover:bg-neutral-200 transition-all transform active:scale-[0.99] tracking-wide"
-                >
-                  {isLogin ? `Enter ${selectedRole} Portal` : 'Create Account'}
-                </button>
-              </form>
+                    <button
+                      type="submit"
+                      className="w-full py-4 bg-white text-black font-bold font-display rounded-xl hover:bg-neutral-200 transition-all transform active:scale-[0.99] tracking-wide"
+                    >
+                      {authMode === 'LOGIN' ? `Enter ${selectedRole} Portal` : 'Create Account'}
+                    </button>
+                  </form>
+              )}
             </div>
           )}
           

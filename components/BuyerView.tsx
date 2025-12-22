@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { User, Product, Order, UserRole, CartItem } from '../types';
-import { getProductsForSeller, saveOrder, getOrdersForBuyer, generateId, cancelOrder, getProductStockForOwner, getUsers, requestOrderReturn, getCart, addToCart, removeFromCart, clearCart, fulfillOrder } from '../services/storage';
+import { User, Product, Order, UserRole, CartItem, ProductUnit } from '../types';
+import { getProductsForSeller, saveOrder, getOrdersForBuyer, generateId, cancelOrder, getProductStockForOwner, getUsers, requestOrderReturn, getCart, addToCart, removeFromCart, clearCart, fulfillOrder, getProductUnits } from '../services/storage';
 import CartDrawer from './CartDrawer';
 
 interface Props {
@@ -11,7 +11,7 @@ const BuyerView: React.FC<Props> = ({ user }) => {
   const [activeTab, setActiveTab] = useState<'browse' | 'orders'>('browse');
   // Product is extended with quantity for display purposes
   const [products, setProducts] = useState<(Product & { quantity: number, sellerName: string, sellerId: string })[]>([]);
-  const [myOrders, setMyOrders] = useState<Order[]>([]);
+  const [myOrders, setMyOrders] = useState<(Order & { assignedUnits?: ProductUnit[] })[]>([]);
   
   // Cart State
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -44,7 +44,20 @@ const BuyerView: React.FC<Props> = ({ user }) => {
     });
 
     setProducts(aggregatedProducts.filter(p => p.quantity > 0));
-    setMyOrders(getOrdersForBuyer(user.id).reverse());
+    
+    // Fetch orders and augment with Unit Details (specifically Auth Codes)
+    const rawOrders = getOrdersForBuyer(user.id).reverse();
+    const allUnits = getProductUnits();
+    
+    const augmentedOrders = rawOrders.map(order => {
+        let assignedUnits: ProductUnit[] = [];
+        if (order.assignedUnitIds && order.assignedUnitIds.length > 0) {
+             assignedUnits = order.assignedUnitIds.map(uid => allUnits.find(u => u.id === uid)).filter(u => u !== undefined) as ProductUnit[];
+        }
+        return { ...order, assignedUnits };
+    });
+
+    setMyOrders(augmentedOrders);
     setCartItems(getCart(user.id));
   };
 
@@ -71,7 +84,9 @@ const BuyerView: React.FC<Props> = ({ user }) => {
     };
 
     addToCart(user.id, item);
-    setCartItems(getCart(user.id));
+    // Force refresh of cart state
+    const updatedCart = getCart(user.id);
+    setCartItems(updatedCart);
     
     setSelectedProduct(null);
     setOrderQty(1);
@@ -286,6 +301,32 @@ const BuyerView: React.FC<Props> = ({ user }) => {
                            )}
                        </div>
                        <p className="text-neutral-400 text-sm">Quantity: <span className="text-white font-mono">{order.quantity}</span></p>
+
+                       {/* ASKE VAULT: Show Codes for Confirmed/Delivered Orders */}
+                       {order.assignedUnits && order.assignedUnits.length > 0 && ['Confirmed', 'Delivered', 'Return Requested'].includes(order.status) && (
+                           <div className="mt-4 p-4 bg-black/40 border border-emerald-900/30 rounded-xl animate-in fade-in slide-in-from-top-2">
+                               <div className="flex items-center gap-2 mb-2">
+                                   <div className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
+                                         <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                                       </svg>
+                                   </div>
+                                   <span className="text-[10px] font-bold uppercase text-emerald-400 tracking-wider">Aske Verified Vault</span>
+                               </div>
+                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                   {order.assignedUnits.map(unit => (
+                                       <div key={unit.id} className="text-xs">
+                                           <div className="flex justify-between text-[10px] text-neutral-500">
+                                               <span>Serial: {unit.serialNumber}</span>
+                                           </div>
+                                           <div className="font-mono bg-emerald-950/30 text-emerald-200 p-1.5 rounded border border-emerald-500/10 break-all select-all cursor-text" title="Copy for Verification">
+                                               {unit.uniqueAuthHash || "Generating..."}
+                                           </div>
+                                       </div>
+                                   ))}
+                               </div>
+                           </div>
+                       )}
                     </div>
                     
                     {/* Minimal Timeline */}
@@ -375,7 +416,7 @@ const BuyerView: React.FC<Props> = ({ user }) => {
 
       {/* High-End Modal for Adding to Cart */}
       {selectedProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
           <div className="bg-neutral-900 border border-white/10 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative">
              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white to-transparent opacity-20"></div>
              
