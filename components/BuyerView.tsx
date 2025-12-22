@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, Product, Order, UserRole, CartItem, ProductUnit } from '../types';
-import { getProductsForSeller, saveOrder, getOrdersForBuyer, generateId, cancelOrder, getProductStockForOwner, getUsers, requestOrderReturn, getCart, addToCart, removeFromCart, clearCart, fulfillOrder, getProductUnits } from '../services/storage';
+import { getProductsForSeller, getOrdersForBuyer, generateId, cancelOrder, getProductStockForOwner, getUsers, requestOrderReturn, getCart, addToCart, removeFromCart, clearCart, getProductUnits, processCheckout, saveOrder } from '../services/storage';
 import CartDrawer from './CartDrawer';
 
 interface Props {
@@ -16,6 +16,8 @@ const BuyerView: React.FC<Props> = ({ user }) => {
   // Cart State
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   // Selection for adding to cart
   const [selectedProduct, setSelectedProduct] = useState<(Product & { quantity: number, sellerId: string, sellerName: string }) | null>(null);
@@ -98,61 +100,36 @@ const BuyerView: React.FC<Props> = ({ user }) => {
       setCartItems(getCart(user.id));
   };
 
-  const handleCheckout = () => {
-      if (confirm("Place order for all items in cart?")) {
-          // Pre-validation: Check Stock for all items
-          for (const item of cartItems) {
-               // Fallback for legacy cart items without sellerId (though rare in this flow)
-               let sellerId = item.sellerId;
-               if (!sellerId) {
-                   const productInList = products.find(p => p.id === item.productId);
-                   if (productInList) sellerId = productInList.sellerId;
-               }
+  const handleCheckout = async () => {
+      if (cartItems.length === 0) return;
 
-               if (!sellerId) {
-                   alert(`Cannot identify seller for ${item.productName}. Please remove and add again.`);
-                   return;
-               }
+      console.log("Order Process Started");
+      setIsProcessingCheckout(true);
 
-               const currentStock = getProductStockForOwner(item.productId, sellerId, item.isSerialized);
-               if (currentStock < item.quantity) {
-                   alert(`Insufficient stock for ${item.productName}. Available: ${currentStock}. Order cancelled.`);
-                   return;
-               }
+      // Simulate a small network delay for UX
+      setTimeout(() => {
+          try {
+            // New Robust Transaction Logic
+            processCheckout(user, cartItems);
+            
+            // On Success
+            console.log("Order Process Success - Logic Complete");
+            setCartItems([]);
+            setIsCartOpen(false);
+            setShowSuccessModal(true);
+          } catch (error: any) {
+            console.error("Order Failed", error);
+            alert("Checkout Failed: " + error.message);
+          } finally {
+            setIsProcessingCheckout(false);
           }
+      }, 1500);
+  };
 
-          // Process Orders
-          cartItems.forEach(item => {
-              // Ensure we have sellerId (validated loop above)
-              let sellerId = item.sellerId;
-              if (!sellerId) {
-                   const productInList = products.find(p => p.id === item.productId);
-                   if (productInList) sellerId = productInList.sellerId;
-              }
-
-              if (sellerId) {
-                  const newOrder: Order = {
-                    id: generateId(),
-                    productId: item.productId,
-                    productName: item.productName,
-                    sellerId: sellerId,
-                    buyerId: user.id,
-                    buyerName: user.name,
-                    quantity: item.quantity,
-                    status: 'Awaiting Confirmation', // Sellers must confirm
-                    dateOrdered: new Date().toISOString().split('T')[0]
-                  };
-                  saveOrder(newOrder);
-              }
-          });
-
-          clearCart(user.id);
-          setCartItems([]);
-          setIsCartOpen(false);
-          setActiveTab('orders');
-          refreshData();
-          alert("Orders placed successfully!");
-      }
+  const closeSuccessModal = () => {
+      setShowSuccessModal(false);
+      setActiveTab('orders');
+      refreshData();
   };
 
   const handleConfirmDelivery = (order: Order) => {
@@ -303,6 +280,9 @@ const BuyerView: React.FC<Props> = ({ user }) => {
                        <p className="text-neutral-400 text-sm">Quantity: <span className="text-white font-mono">{order.quantity}</span></p>
 
                        {/* ASKE VAULT: Show Codes for Confirmed/Delivered Orders */}
+                       {/* Note: Units are sold immediately, but maybe we hide codes until 'Confirmed' by Seller? 
+                           For demo, let's show them immediately or wait for confirmation. 
+                           Original code waited for confirmation. Let's keep that UX. */}
                        {order.assignedUnits && order.assignedUnits.length > 0 && ['Confirmed', 'Delivered', 'Return Requested'].includes(order.status) && (
                            <div className="mt-4 p-4 bg-black/40 border border-emerald-900/30 rounded-xl animate-in fade-in slide-in-from-top-2">
                                <div className="flex items-center gap-2 mb-2">
@@ -355,9 +335,10 @@ const BuyerView: React.FC<Props> = ({ user }) => {
 
                     {/* Actions */}
                     <div className="md:w-48 text-right flex justify-end">
+                       {/* IF status is 'Confirmed', Buyer can 'Mark Received' */}
                        {order.status === 'Confirmed' ? (
                           <button 
-                            onClick={() => handleConfirmDelivery(order)}
+                             onClick={() => handleConfirmDelivery(order)}
                             className="px-5 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-neutral-200 transition-colors"
                           >
                             Mark Received
@@ -412,7 +393,30 @@ const BuyerView: React.FC<Props> = ({ user }) => {
          cartItems={cartItems}
          onRemoveItem={handleRemoveFromCart}
          onCheckout={handleCheckout}
+         isProcessing={isProcessingCheckout}
       />
+
+      {/* SUCCESS MODAL */}
+      {showSuccessModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-300">
+              <div className="bg-neutral-900 border border-white/10 rounded-3xl w-full max-w-sm p-8 text-center flex flex-col items-center shadow-2xl animate-in zoom-in duration-300">
+                  <div className="w-20 h-20 rounded-full bg-emerald-500 text-black flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(16,185,129,0.3)]">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-10 h-10 animate-[ping_1s_ease-in-out_1]">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                      </svg>
+                  </div>
+                  <h2 className="text-2xl font-display font-bold text-white mb-2">Order Confirmed</h2>
+                  <p className="text-neutral-400 text-sm mb-8">Thank you for your acquisition. Your order has been placed and inventory reserved.</p>
+                  
+                  <button 
+                    onClick={closeSuccessModal}
+                    className="w-full py-3 bg-white text-black font-bold rounded-xl hover:bg-neutral-200 transition-colors"
+                  >
+                      View My Orders
+                  </button>
+              </div>
+          </div>
+      )}
 
       {/* High-End Modal for Adding to Cart */}
       {selectedProduct && (

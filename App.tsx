@@ -1,20 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole } from './types';
-import { getCurrentUser, logout } from './services/storage';
+import { getCurrentUser, logout, getUnreadCount } from './services/storage';
 import Auth from './components/Auth';
 import ManufacturerView from './components/ManufacturerView';
 import SellerView from './components/SellerView';
 import BuyerView from './components/BuyerView';
+import AdminView from './components/AdminView';
 import ProfileModal from './components/ProfileModal';
 import AskeChatbot from './components/AskeChatbot';
+import MessagingDrawer from './components/MessagingDrawer';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [showProfile, setShowProfile] = useState(false);
+  const [showMessages, setShowMessages] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    // Check for existing session
     const storedUser = getCurrentUser();
     if (storedUser) {
       setUser(storedUser);
@@ -22,10 +25,23 @@ function App() {
     setIsLoading(false);
   }, []);
 
+  // Poll for notifications
+  useEffect(() => {
+      if (user) {
+          const checkNotifications = () => {
+              setUnreadCount(getUnreadCount(user.id));
+          };
+          checkNotifications();
+          const interval = setInterval(checkNotifications, 5000);
+          return () => clearInterval(interval);
+      }
+  }, [user]);
+
   const handleLogout = () => {
     logout();
     setUser(null);
     setShowProfile(false);
+    setShowMessages(false);
   };
 
   if (isLoading) return <div className="h-screen flex items-center justify-center bg-neutral-950 text-neutral-500 font-display animate-pulse">Initializing Lallan Shop...</div>;
@@ -36,6 +52,8 @@ function App() {
 
   const renderDashboard = () => {
     switch (user.role) {
+      case UserRole.ADMIN:
+          return <AdminView user={user} />;
       case UserRole.MANUFACTURER:
         return <ManufacturerView user={user} />;
       case UserRole.SELLER:
@@ -61,12 +79,29 @@ function App() {
               <div className="h-0.5 w-0 group-hover:w-full bg-white transition-all duration-500 ease-out"></div>
             </div>
             <div className="hidden sm:block h-6 w-px bg-white/10 mx-2"></div>
-            <span className="text-xs font-mono uppercase tracking-widest text-neutral-500 border border-white/10 px-2 py-1 rounded-md">
-              {user.role}
-            </span>
+            
+            {/* Dynamic Rainbow Aura Role Header (Border Only) */}
+            <div className="aura-border-glow p-0.5 inline-flex items-center justify-center">
+                <span className="relative z-10 px-4 py-1 bg-neutral-950 rounded-full text-xs font-mono uppercase tracking-widest text-white font-bold block leading-relaxed">
+                   {user.role}
+                </span>
+            </div>
           </div>
 
           <div className="flex items-center gap-6">
+            {/* Notification Bell */}
+            <button 
+                onClick={() => setShowMessages(true)}
+                className="relative p-2 text-neutral-400 hover:text-white transition-colors group"
+            >
+                <svg className="w-6 h-6 group-hover:scale-110 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                {unreadCount > 0 && (
+                    <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-neutral-900 animate-pulse"></span>
+                )}
+            </button>
+
             <button 
               onClick={() => setShowProfile(true)}
               className="flex items-center gap-3 group"
@@ -114,8 +149,15 @@ function App() {
         />
       )}
 
-      {/* Aske Verification Bot */}
-      <AskeChatbot />
+      {/* Messaging Drawer */}
+      <MessagingDrawer 
+          isOpen={showMessages}
+          onClose={() => setShowMessages(false)}
+          currentUser={user}
+      />
+
+      {/* Aske Verification Bot - RESTRICTED TO BUYERS */}
+      {user.role === UserRole.BUYER && <AskeChatbot />}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, Product, UserRole, ProductUnit, CartItem } from '../types';
-import { getUsersByRole, saveProductBatch, getProducts, getAvailableSerialNumbers, updateProductUnits, generateId, getManufacturerDispatchHistory, deleteProductUnit, deleteProduct, getProductUnits, transferBulkStock, addToCart, getCart, removeFromCart, clearCart, getBulkStock } from '../services/storage';
+import { getUsersByRole, saveProductBatch, getProducts, getAvailableSerialNumbers, updateProductUnits, generateId, getManufacturerDispatchHistory, deleteProductUnit, deleteProduct, getProductUnits, transferBulkStock, addToCart, getCart, removeFromCart, clearCart, getBulkStock, generateNextSerialBatch } from '../services/storage';
 import CartDrawer from './CartDrawer';
 
 interface Props {
@@ -15,7 +15,9 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
   const [isSerialized, setIsSerialized] = useState(true);
   const [qty, setQty] = useState(1);
   const [mfgDate, setMfgDate] = useState(new Date().toISOString().split('T')[0]);
-  const [serialNumbers, setSerialNumbers] = useState<string[]>(['']);
+  
+  // Replaced manual entry with generated list
+  const [generatedSerials, setGeneratedSerials] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // --- DISTRIBUTION STATE ---
@@ -41,44 +43,27 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
   const [expandedProductUnits, setExpandedProductUnits] = useState<ProductUnit[]>([]);
 
 
-  // Handle Qty Change & Dynamic Inputs
+  // Handle Qty Change
   const handleQtyChange = (newQty: number) => {
     let val = Math.max(1, newQty);
-    
-    // Cap quantity for serialized items to prevent UI lag with too many inputs
-    if (isSerialized && val > 20) val = 20;
-    
+    if (isSerialized && val > 100) val = 100; // Cap batch size for performance
     setQty(val);
-    
-    if (isSerialized) {
-        // Resize array but keep existing values if possible
-        setSerialNumbers(prev => {
-        const newArr = new Array(val).fill('');
-        for (let i = 0; i < Math.min(prev.length, val); i++) {
-            newArr[i] = prev[i];
-        }
-        return newArr;
-        });
-    }
+    setGeneratedSerials([]); // Reset generated serials if qty changes
   };
 
-  // Ensure qty is valid when switching serialization mode
-  useEffect(() => {
-     if (isSerialized && qty > 20) {
-         handleQtyChange(20);
-     }
-  }, [isSerialized]);
-
-  const handleSerialChange = (index: number, value: string) => {
-    const newArr = [...serialNumbers];
-    newArr[index] = value;
-    setSerialNumbers(newArr);
+  const handleGenerateSerials = () => {
+      try {
+          const serials = generateNextSerialBatch(qty);
+          setGeneratedSerials(serials);
+      } catch (e: any) {
+          alert(e.message);
+      }
   };
 
   const handleProductionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSerialized && serialNumbers.some(s => !s.trim())) {
-      alert("Please fill in all Serial Numbers.");
+    if (isSerialized && generatedSerials.length === 0) {
+      alert("Please click 'Generate Serial Numbers' before registering.");
       return;
     }
     
@@ -92,7 +77,7 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
       isSerialized: isSerialized
     };
 
-    const units: Partial<ProductUnit>[] = isSerialized ? serialNumbers.map(sn => ({
+    const units: Partial<ProductUnit>[] = isSerialized ? generatedSerials.map(sn => ({
       id: generateId(),
       productId: productId,
       serialNumber: sn,
@@ -108,7 +93,8 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
     // Reset
     setProdName('');
     setIsSerialized(true);
-    handleQtyChange(1); // Resets SN array
+    setQty(1);
+    setGeneratedSerials([]);
     alert("Production batch registered successfully with Secure Anti-Counterfeit Hashes.");
   };
 
@@ -277,7 +263,7 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
   };
 
   const handleDeleteUnit = (unitId: string) => {
-      if (confirm('Permanently delete this Serial Number? This cannot be undone.')) {
+      if (confirm('Permanently delete this Serial Number? This will return the number to the available pool.')) {
           deleteProductUnit(unitId);
           // Refresh
           const updatedUnits = expandedProductUnits.filter(u => u.id !== unitId);
@@ -339,7 +325,7 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
         <div className="bg-neutral-900/50 backdrop-blur border border-white/5 rounded-3xl p-8">
            <div className="mb-8 border-b border-white/5 pb-4">
              <h2 className="text-2xl font-display font-bold text-white mb-1">Batch Production</h2>
-             <p className="text-neutral-500 text-sm">Register inventory. Serialized items will generate secure 'Aske' Verification Hashes automatically.</p>
+             <p className="text-neutral-500 text-sm">Register inventory. Serialized items will use Admin-managed sequential numbers.</p>
            </div>
 
            <form onSubmit={handleProductionSubmit} className="space-y-6">
@@ -374,13 +360,13 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
                         type="checkbox" 
                         className="sr-only peer" 
                         checked={isSerialized}
-                        onChange={e => setIsSerialized(e.target.checked)}
+                        onChange={e => { setIsSerialized(e.target.checked); setGeneratedSerials([]); }}
                     />
                     <div className="w-11 h-6 bg-neutral-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white"></div>
                     <span className="ml-3 text-sm font-medium text-white">Track by Serial Number?</span>
                  </label>
                  <p className="text-xs text-neutral-500">
-                    {isSerialized ? 'Each unit requires a unique ID.' : 'Bulk tracking by total quantity only.'}
+                    {isSerialized ? 'System generates unique numeric IDs.' : 'Bulk tracking by total quantity only.'}
                  </p>
               </div>
 
@@ -397,7 +383,7 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
                      <input
                       type="number"
                       min="1"
-                      max={isSerialized ? 20 : 1000}
+                      max={isSerialized ? 100 : 1000}
                       value={qty}
                       onChange={e => handleQtyChange(parseInt(e.target.value) || 1)}
                       className="flex-1 bg-black/50 border border-white/10 rounded-xl py-3 text-center text-white font-mono text-xl focus:outline-none focus:border-white/30 transition-colors"
@@ -410,39 +396,43 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
                         +
                     </button>
                   </div>
-                  {isSerialized && qty >= 20 && (
-                      <p className="text-[10px] text-amber-500 text-center animate-pulse">Maximum 20 units for manual serialized entry.</p>
-                  )}
               </div>
 
-              {/* Dynamic Serial Inputs */}
+              {/* Automated Serial Generation Area */}
               {isSerialized && (
-                <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                    <label className="text-xs uppercase tracking-wider text-neutral-400 font-medium">Serial Numbers</label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-black/30 p-4 rounded-xl border border-white/5 max-h-[300px] overflow-y-auto">
-                        {serialNumbers.map((sn, idx) => (
-                        <div key={idx} className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-neutral-500 font-mono">#{idx + 1}</span>
-                            <input 
-                            type="text"
-                            required
-                            className="w-full bg-neutral-900 border border-white/10 rounded-lg pl-8 pr-3 py-2 text-sm text-white focus:border-white/40 outline-none font-mono"
-                            placeholder={`SN-${new Date().getFullYear()}-00${idx+1}`}
-                            value={sn}
-                            onChange={(e) => handleSerialChange(idx, e.target.value)}
-                            />
+                <div className="space-y-4 animate-in fade-in slide-in-from-top-2 bg-neutral-800/20 p-6 rounded-2xl border border-white/5">
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <h3 className="text-white font-bold text-sm">Automated Serialization</h3>
+                            <p className="text-xs text-neutral-500">Generates next available numbers from Admin range.</p>
                         </div>
-                        ))}
+                        <button 
+                            type="button"
+                            onClick={handleGenerateSerials}
+                            className="px-6 py-2 bg-white text-black text-sm font-bold rounded-lg hover:bg-neutral-200 transition-colors shadow-lg"
+                        >
+                            {generatedSerials.length > 0 ? 'Regenerate Numbers' : 'Generate Serial Numbers'}
+                        </button>
                     </div>
+
+                    {generatedSerials.length > 0 && (
+                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-[200px] overflow-y-auto p-2 bg-black/40 rounded-xl border border-white/5">
+                            {generatedSerials.map((sn, idx) => (
+                                <div key={idx} className="bg-neutral-900 border border-white/10 rounded p-2 text-center">
+                                    <span className="text-xs font-mono text-emerald-400 font-bold">{sn}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
               )}
 
               <button 
                 type="submit" 
-                disabled={isSubmitting}
-                className="w-full py-4 bg-white text-black font-display font-bold rounded-xl hover:bg-neutral-200 transition-colors shadow-lg disabled:opacity-50"
+                disabled={isSubmitting || (isSerialized && generatedSerials.length === 0)}
+                className="w-full py-4 bg-white text-black font-display font-bold rounded-xl hover:bg-neutral-200 transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? 'Generating Hash Keys...' : 'Register Batch'}
+                {isSubmitting ? 'Registering...' : 'Register Batch'}
               </button>
            </form>
         </div>

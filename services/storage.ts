@@ -1,13 +1,15 @@
-import { Product, User, UserRole, Order, ProductUnit, UnitStatus, BulkStock, CartItem } from '../types';
+import { Product, User, UserRole, Order, ProductUnit, UnitStatus, BulkStock, CartItem, Message, UserStatus, GlobalSettings } from '../types';
 
 const USERS_KEY = 'chaintrack_users';
 const PRODUCTS_KEY = 'chaintrack_products';
 const UNITS_KEY = 'chaintrack_units'; 
-const BULK_STOCK_KEY = 'chaintrack_bulk_stock'; // New Key
+const BULK_STOCK_KEY = 'chaintrack_bulk_stock'; 
 const ORDERS_KEY = 'chaintrack_orders';
 const CURRENT_USER_KEY = 'chaintrack_current_user';
 const CART_KEY_PREFIX = 'chaintrack_cart_';
-const SYSTEM_SECRET_KEY = 'LALLAN-ASKE-V1-SECRET'; // In prod, this would be env variable
+const MESSAGES_KEY = 'chaintrack_messages';
+const SETTINGS_KEY = 'chaintrack_settings';
+const SYSTEM_SECRET_KEY = 'LALLAN-ASKE-V1-SECRET'; 
 
 export const generateId = (): string => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -16,16 +18,84 @@ export const generateId = (): string => {
   return Date.now().toString(36) + Math.random().toString(36).substring(2);
 };
 
+// --- Global Settings & Serial Logic ---
+
+export const getGlobalSettings = (): GlobalSettings => {
+  const stored = localStorage.getItem(SETTINGS_KEY);
+  if (stored) return JSON.parse(stored);
+  // Default values
+  return {
+    serialRangeStart: 100000,
+    serialRangeEnd: 100999,
+    recycledSerials: []
+  };
+};
+
+export const saveGlobalSettings = (settings: GlobalSettings): void => {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+};
+
+export const generateNextSerialBatch = (quantity: number): string[] => {
+  const settings = getGlobalSettings();
+  const allUnits = getProductUnits();
+  
+  // Extract all currently used numeric serials within the managed range
+  // We filter for simple numeric serials to avoid conflicts with legacy "SN-2024-..." types if any existed manually
+  const usedNumbers = new Set<number>();
+  allUnits.forEach(u => {
+    const num = parseInt(u.serialNumber);
+    if (!isNaN(num)) usedNumbers.add(num);
+  });
+
+  const generated: string[] = [];
+  
+  // 1. Try to use Recycled numbers first (LIFO or FIFO doesn't matter much here, picking from list)
+  let recycledUsedCount = 0;
+  
+  // Sort recycled to be nice
+  settings.recycledSerials.sort((a,b) => a - b);
+
+  while (generated.length < quantity && settings.recycledSerials.length > 0) {
+     const candidate = settings.recycledSerials.shift(); // Take from front
+     if (candidate !== undefined && !usedNumbers.has(candidate)) {
+        generated.push(candidate.toString());
+        recycledUsedCount++;
+     }
+  }
+
+  // 2. Generate new numbers linearly
+  if (generated.length < quantity) {
+      let candidate = settings.serialRangeStart;
+      
+      // Fast forward to finding a gap or end of sequence
+      // Optimization: In a real DB we'd have a 'last_seq' pointer. 
+      // Here we iterate. For 10k-100k records this is fine.
+      while (generated.length < quantity) {
+          if (candidate > settings.serialRangeEnd) {
+             throw new Error("Serial number range exhausted. Please contact Admin.");
+          }
+
+          if (!usedNumbers.has(candidate)) {
+              generated.push(candidate.toString());
+          }
+          candidate++;
+      }
+  }
+
+  // Update Settings (save the modified recycled array)
+  saveGlobalSettings(settings);
+
+  return generated;
+};
+
 // --- Security / Aske Logic ---
 
 export const generateSecureHash = async (serialNumber: string, manufacturerId: string): Promise<string> => {
-    // Formula: SHA-256(SerialNumber + ManufacturerID + SystemKey)
     const data = `${serialNumber}-${manufacturerId}-${SYSTEM_SECRET_KEY}`;
     const encoder = new TextEncoder();
     const dataBuffer = encoder.encode(data);
     const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
-    // Convert to Hex and take first 16 chars for a "Code" style, or full hash
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 };
 
@@ -36,26 +106,60 @@ export const verifyProductIdentity = async (qrSerialNumber: string, inputAuthCod
     if (!unit || !unit.uniqueAuthHash) {
         return { valid: false };
     }
-
-    // Since we store the hash, we compare the input directly against the stored hash
-    // The InputAuthCode PROVIDED by the user IS the hash (retrieved from their dashboard)
     if (unit.uniqueAuthHash === inputAuthCode) {
         return { valid: true, unit };
     }
-    
     return { valid: false };
 };
 
 // --- User Management ---
 
+// Seed Admin Logic
+const seedAdmin = (users: User[]) => {
+    const adminEmail = 'LallanBabuShop@gmail.com';
+    const hasAdmin = users.find(u => u.email === adminEmail);
+    if (!hasAdmin) {
+        const adminUser: User = {
+            id: 'admin-001',
+            email: adminEmail,
+            password: 'LallanAdmin123!', // Default password
+            role: UserRole.ADMIN,
+            name: 'Lallan Babu (Admin)',
+            dob: '1941-08-31',
+            phone: '8987242812',
+            status: 'Approved',
+            isBanned: false
+        };
+        users.push(adminUser);
+        localStorage.setItem(USERS_KEY, JSON.stringify(users));
+    }
+};
+
 export const getUsers = (): User[] => {
   const stored = localStorage.getItem(USERS_KEY);
-  return stored ? JSON.parse(stored) : [];
+  const users = stored ? JSON.parse(stored) : [];
+  
+  // Ensure admin exists on every get if empty or missing
+  if (!users.find((u: User) => u.role === UserRole.ADMIN)) {
+      seedAdmin(users);
+      return JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
+  }
+  return users;
 };
 
 export const saveUser = (user: User): void => {
   const users = getUsers();
   const index = users.findIndex(u => u.id === user.id);
+  
+  // Set default status for new users
+  // Manufacturers/Sellers -> Pending
+  // Buyers -> Approved
+  if (!user.status) {
+      if (user.role === UserRole.BUYER) user.status = 'Approved';
+      else user.status = 'Pending';
+  }
+  if (user.isBanned === undefined) user.isBanned = false;
+
   if (index >= 0) {
     users[index] = user;
   } else {
@@ -88,6 +192,37 @@ export const deleteUser = (userId: string): void => {
   }
 };
 
+// --- ADMIN MODERATION ACTIONS ---
+
+export const toggleUserBan = (userId: string): void => {
+    const users = getUsers();
+    const user = users.find(u => u.id === userId);
+    if (user && user.role !== UserRole.ADMIN) {
+        user.isBanned = !user.isBanned;
+        localStorage.setItem(USERS_KEY, JSON.stringify(users));
+    }
+};
+
+export const approveUser = (userId: string): void => {
+    const users = getUsers();
+    const user = users.find(u => u.id === userId);
+    if (user) {
+        user.status = 'Approved';
+        user.rejectionReason = undefined;
+        localStorage.setItem(USERS_KEY, JSON.stringify(users));
+    }
+};
+
+export const rejectUser = (userId: string, reason: string): void => {
+    const users = getUsers();
+    const user = users.find(u => u.id === userId);
+    if (user) {
+        user.status = 'Rejected';
+        user.rejectionReason = reason;
+        localStorage.setItem(USERS_KEY, JSON.stringify(users));
+    }
+};
+
 export const findUserByEmail = (email: string): User | undefined => {
   return getUsers().find(u => u.email === email);
 };
@@ -111,6 +246,46 @@ export const logout = (): void => {
   localStorage.removeItem(CURRENT_USER_KEY);
 };
 
+// --- Messaging System ---
+
+export const getMessages = (): Message[] => {
+    const stored = localStorage.getItem(MESSAGES_KEY);
+    return stored ? JSON.parse(stored) : [];
+};
+
+export const sendMessage = (msg: Message): void => {
+    const messages = getMessages();
+    messages.push(msg);
+    localStorage.setItem(MESSAGES_KEY, JSON.stringify(messages));
+};
+
+export const markMessageAsRead = (messageId: string): void => {
+    const messages = getMessages();
+    const msg = messages.find(m => m.id === messageId);
+    if (msg) {
+        msg.isRead = true;
+        localStorage.setItem(MESSAGES_KEY, JSON.stringify(messages));
+    }
+};
+
+export const endDiscussion = (senderId: string, receiverId: string): void => {
+    const messages = getMessages();
+    // Mark all messages between these two as closed
+    messages.forEach(m => {
+        if ((m.senderId === senderId && m.receiverId === receiverId) || 
+            (m.senderId === receiverId && m.receiverId === senderId)) {
+            m.isClosed = true;
+        }
+    });
+    localStorage.setItem(MESSAGES_KEY, JSON.stringify(messages));
+};
+
+export const getUnreadCount = (userId: string): number => {
+    const messages = getMessages();
+    return messages.filter(m => m.receiverId === userId && !m.isRead).length;
+};
+
+
 // --- Product & Inventory Management ---
 
 export const getProducts = (): Product[] => {
@@ -130,47 +305,27 @@ export const getBulkStock = (): BulkStock[] => {
 
 export const saveProductBatch = async (product: Product, quantity: number, partialUnits: Partial<ProductUnit>[]): Promise<void> => {
   const products = getProducts();
-  
-  // Update or Add Product definition
   const pIndex = products.findIndex(p => p.id === product.id);
   if (pIndex >= 0) products[pIndex] = product;
   else products.push(product);
-  
   localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
 
   if (product.isSerialized) {
     const allUnits = getProductUnits();
-    
-    // Process units to generate hashes asynchronously
     const finalUnits: ProductUnit[] = [];
-    
     for (const u of partialUnits) {
         if (u.serialNumber && u.manufacturerId) {
              const hash = await generateSecureHash(u.serialNumber, u.manufacturerId);
-             finalUnits.push({
-                 ...u,
-                 uniqueAuthHash: hash
-             } as ProductUnit);
+             finalUnits.push({ ...u, uniqueAuthHash: hash } as ProductUnit);
         }
     }
-
     finalUnits.forEach(u => allUnits.push(u));
     localStorage.setItem(UNITS_KEY, JSON.stringify(allUnits));
   } else {
-    // Add Bulk Stock
     const allStock = getBulkStock();
     const existingStock = allStock.find(s => s.productId === product.id && s.ownerId === product.manufacturerId);
-    
-    if (existingStock) {
-      existingStock.quantity += quantity;
-    } else {
-      allStock.push({
-        id: generateId(),
-        productId: product.id,
-        ownerId: product.manufacturerId,
-        quantity: quantity
-      });
-    }
+    if (existingStock) existingStock.quantity += quantity;
+    else allStock.push({ id: generateId(), productId: product.id, ownerId: product.manufacturerId, quantity: quantity });
     localStorage.setItem(BULK_STOCK_KEY, JSON.stringify(allStock));
   }
 };
@@ -184,50 +339,70 @@ export const updateProductUnits = (unitsToUpdate: ProductUnit[]): void => {
   localStorage.setItem(UNITS_KEY, JSON.stringify(allUnits));
 };
 
-// Transfer Bulk Stock (Manufacturer -> Seller or Seller -> Buyer)
 export const transferBulkStock = (productId: string, fromOwnerId: string, toOwnerId: string | null, quantity: number): void => {
     const allStock = getBulkStock();
     const sourceStock = allStock.find(s => s.productId === productId && s.ownerId === fromOwnerId);
-    
     if (sourceStock && sourceStock.quantity >= quantity) {
         sourceStock.quantity -= quantity;
-        
-        // If toOwnerId is null, it means it's sold to a buyer (leaving the 'stock' system)
         if (toOwnerId) {
             const destStock = allStock.find(s => s.productId === productId && s.ownerId === toOwnerId);
-            if (destStock) {
-                destStock.quantity += quantity;
-            } else {
-                allStock.push({
-                    id: generateId(),
-                    productId: productId,
-                    ownerId: toOwnerId,
-                    quantity: quantity
-                });
-            }
+            if (destStock) destStock.quantity += quantity;
+            else allStock.push({ id: generateId(), productId: productId, ownerId: toOwnerId, quantity: quantity });
         }
     }
     localStorage.setItem(BULK_STOCK_KEY, JSON.stringify(allStock));
 };
 
-// Strict Deletion: Delete Unit
 export const deleteProductUnit = (unitId: string): void => {
-  const units = getProductUnits().filter(u => u.id !== unitId);
-  localStorage.setItem(UNITS_KEY, JSON.stringify(units));
+  const allUnits = getProductUnits();
+  const unitToDelete = allUnits.find(u => u.id === unitId);
+  const remainingUnits = allUnits.filter(u => u.id !== unitId);
+  
+  localStorage.setItem(UNITS_KEY, JSON.stringify(remainingUnits));
+
+  // Recycle the serial number if it was numeric
+  if (unitToDelete) {
+      const num = parseInt(unitToDelete.serialNumber);
+      if (!isNaN(num)) {
+          const settings = getGlobalSettings();
+          if (!settings.recycledSerials.includes(num)) {
+              settings.recycledSerials.push(num);
+              saveGlobalSettings(settings);
+          }
+      }
+  }
 };
 
-// Strict Deletion: Delete Product
 export const deleteProduct = (productId: string): boolean => {
   const units = getProductUnits();
-  const hasUnits = units.some(u => u.productId === productId);
   
-  const stocks = getBulkStock();
-  const hasStock = stocks.some(s => s.productId === productId && s.quantity > 0);
-  
-  if (hasUnits || hasStock) return false;
+  // Recycle Serials for units being deleted
+  const unitsToDelete = units.filter(u => u.productId === productId);
+  const settings = getGlobalSettings();
+  let settingsChanged = false;
 
+  unitsToDelete.forEach(u => {
+      const num = parseInt(u.serialNumber);
+      if (!isNaN(num) && !settings.recycledSerials.includes(num)) {
+          settings.recycledSerials.push(num);
+          settingsChanged = true;
+      }
+  });
+
+  if (settingsChanged) saveGlobalSettings(settings);
+
+  // Admin force delete cleans up everything
   const products = getProducts().filter(p => p.id !== productId);
   localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
+  
+  // Clean related units
+  const remainingUnits = units.filter(u => u.productId !== productId);
+  localStorage.setItem(UNITS_KEY, JSON.stringify(remainingUnits));
+  
+  // Clean related stock
+  const remainingStock = getBulkStock().filter(s => s.productId !== productId);
+  localStorage.setItem(BULK_STOCK_KEY, JSON.stringify(remainingStock));
+  
   return true;
 };
 
@@ -236,7 +411,6 @@ export const deleteProduct = (productId: string): boolean => {
 export const getProductStockForOwner = (productId: string, ownerId: string, isSerialized: boolean): number => {
     if (isSerialized) {
         const units = getProductUnits();
-        // Check for IN_FACTORY (if Mfg) or AT_SELLER (if Seller)
         return units.filter(u => 
             u.productId === productId && 
             ((u.manufacturerId === ownerId && u.status === 'IN_FACTORY') || 
@@ -248,16 +422,11 @@ export const getProductStockForOwner = (productId: string, ownerId: string, isSe
     }
 };
 
-// Helper: Get actual Product objects with computed quantity
 export const getProductsWithStock = (ownerId: string, role: UserRole): (Product & { quantity: number })[] => {
   const products = getProducts();
-  
   return products.map(p => {
     const quantity = getProductStockForOwner(p.id, ownerId, p.isSerialized);
-    
-    // Filter logic: Only show products relevant to owner
     if (role === UserRole.MANUFACTURER && p.manufacturerId !== ownerId) return null;
-    
     return { ...p, quantity };
   }).filter((p): p is (Product & { quantity: number }) => p !== null && (role === UserRole.MANUFACTURER || p.quantity > 0)); 
 };
@@ -272,7 +441,7 @@ export const getProductsForSeller = (sellerId: string): (Product & { quantity: n
 
 export const getAvailableSerialNumbers = (productId: string, status: UnitStatus, ownerIdField: 'manufacturerId' | 'sellerId', ownerId: string): ProductUnit[] => {
   const units = getProductUnits();
-  // @ts-ignore - dynamic key access
+  // @ts-ignore
   return units.filter(u => u.productId === productId && u.status === status && u[ownerIdField] === ownerId);
 };
 
@@ -280,10 +449,7 @@ export const getManufacturerDispatchHistory = (manufacturerId: string): (Product
   const units = getProductUnits();
   const products = getProducts();
   const users = getUsers();
-
-  // Filter for units made by this manufacturer that have been sent to a seller (sellerId exists)
   const history = units.filter(u => u.manufacturerId === manufacturerId && u.sellerId);
-
   return history.map(u => {
     const prod = products.find(p => p.id === u.productId);
     const seller = users.find(s => s.id === u.sellerId);
@@ -293,7 +459,6 @@ export const getManufacturerDispatchHistory = (manufacturerId: string): (Product
       sellerName: seller ? seller.name : 'Unknown Seller'
     };
   }).sort((a, b) => {
-    // Sort by date sent descending
     const dateA = a.dateSentToSeller || '';
     const dateB = b.dateSentToSeller || '';
     return dateB.localeCompare(dateA);
@@ -309,16 +474,9 @@ export const getCart = (userId: string): CartItem[] => {
 
 export const addToCart = (userId: string, item: CartItem): void => {
   const cart = getCart(userId);
-  
-  // Strict matching including sellerId to avoid merging items from different sellers
-  const existing = cart.find(c => 
-    c.productId === item.productId && 
-    c.sellerId === item.sellerId
-  );
-
+  const existing = cart.find(c => c.productId === item.productId && c.sellerId === item.sellerId);
   if (existing) {
     existing.quantity += item.quantity;
-    // Merge unitIds if present
     if (item.unitIds && item.unitIds.length > 0) {
         const existingUnits = existing.unitIds || [];
         const newUnits = item.unitIds.filter(id => !existingUnits.includes(id));
@@ -343,7 +501,6 @@ export const clearCart = (userId: string): void => {
 
 export const returnUnitsToManufacturer = (unitIds: string[]): void => {
   const allUnits = getProductUnits();
-  
   unitIds.forEach(id => {
     const unit = allUnits.find(u => u.id === id);
     if (unit) {
@@ -351,7 +508,6 @@ export const returnUnitsToManufacturer = (unitIds: string[]): void => {
       unit.dateReturned = new Date().toISOString().split('T')[0];
     }
   });
-  
   localStorage.setItem(UNITS_KEY, JSON.stringify(allUnits));
 };
 
@@ -360,7 +516,6 @@ export const returnBulkToManufacturer = (productId: string, sellerId: string, qu
     const sellerStock = allStock.find(s => s.productId === productId && s.ownerId === sellerId);
     if (sellerStock && sellerStock.quantity >= quantity) {
         sellerStock.quantity -= quantity;
-        
         const products = getProducts();
         const prod = products.find(p => p.id === productId);
         if (prod) {
@@ -375,20 +530,15 @@ export const requestOrderReturn = (orderId: string): void => {
   const orders = getOrders();
   const order = orders.find(o => o.id === orderId);
   const units = getProductUnits();
-
   if (order) {
     order.status = 'Return Requested';
-    
     if (order.assignedUnitIds) {
         order.assignedUnitIds.forEach(uid => {
         const u = units.find(unit => unit.id === uid);
-        if (u) {
-            u.status = 'RETURN_REQUESTED';
-        }
+        if (u) u.status = 'RETURN_REQUESTED';
         });
         localStorage.setItem(UNITS_KEY, JSON.stringify(units));
     }
-    
     localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
   }
 };
@@ -397,20 +547,16 @@ export const processBuyerReturn = (orderId: string, accept: boolean): void => {
     const orders = getOrders();
     const order = orders.find(o => o.id === orderId);
     const units = getProductUnits();
-  
     if (order) {
       if (accept) {
           order.status = 'Returned';
           if (order.assignedUnitIds) {
              order.assignedUnitIds.forEach(uid => {
                 const u = units.find(unit => unit.id === uid);
-                if (u) {
-                  u.status = 'RETURNED_TO_SELLER';
-                }
+                if (u) u.status = 'RETURNED_TO_SELLER';
              });
              localStorage.setItem(UNITS_KEY, JSON.stringify(units));
           } else {
-             // Bulk Return: Increase Seller Stock
              const stocks = getBulkStock();
              const sellerStock = stocks.find(s => s.productId === order.productId && s.ownerId === order.sellerId);
              if (sellerStock) {
@@ -428,7 +574,6 @@ export const processBuyerReturn = (orderId: string, accept: boolean): void => {
             localStorage.setItem(UNITS_KEY, JSON.stringify(units));
         }
       }
-  
       localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
     }
 };
@@ -443,40 +588,140 @@ export const getOrders = (): Order[] => {
 export const saveOrder = (order: Order): void => {
   const orders = getOrders();
   const index = orders.findIndex(o => o.id === order.id);
-  if (index >= 0) {
-    orders[index] = order;
-  } else {
-    orders.push(order);
-  }
+  if (index >= 0) orders[index] = order;
+  else orders.push(order);
   localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
+};
+
+// ---------------------------------------------------------
+// CRITICAL UPDATE: REBUILT TRANSACTION LOGIC FOR CHECKOUT
+// ---------------------------------------------------------
+export const processCheckout = (user: User, cartItems: CartItem[]): void => {
+    const products = getProducts();
+    let allUnits = getProductUnits();
+    let allStock = getBulkStock();
+    let allOrders = getOrders();
+
+    // Step A: Validation Phase
+    // Ensure all items are in stock before processing any order
+    for (const item of cartItems) {
+        let sellerId = item.sellerId;
+        // Fallback logic for missing sellerId (legacy support)
+        if (!sellerId) {
+             const productInList = products.find(p => p.id === item.productId);
+             if (productInList) sellerId = productInList.manufacturerId;
+        }
+
+        if (!sellerId) throw new Error(`Data integrity error: Cannot identify seller for ${item.productName}. Please clear cart and try again.`);
+
+        if (item.isSerialized) {
+            const availableUnits = allUnits.filter(u => 
+                u.productId === item.productId && 
+                u.sellerId === sellerId && 
+                (u.status === 'AT_SELLER' || u.status === 'RETURNED_TO_SELLER')
+            );
+            if (availableUnits.length < item.quantity) {
+                throw new Error(`Insufficient stock for ${item.productName}. Requested: ${item.quantity}, Available: ${availableUnits.length}. Order cancelled.`);
+            }
+        } else {
+            const stock = allStock.find(s => s.productId === item.productId && s.ownerId === sellerId);
+             if (!stock || stock.quantity < item.quantity) {
+                throw new Error(`Insufficient bulk stock for ${item.productName}. Order cancelled.`);
+            }
+        }
+    }
+
+    // Step B & C: Execution Phase (Order Creation & Inventory Deduction)
+    const newOrders: Order[] = [];
+    
+    for (const item of cartItems) {
+        // We can safely assume sellerId exists now due to validation phase
+        let sellerId = item.sellerId || products.find(p => p.id === item.productId)?.manufacturerId;
+        if (!sellerId) continue; 
+
+        const newOrder: Order = {
+            id: generateId(),
+            productId: item.productId,
+            productName: item.productName,
+            sellerId: sellerId,
+            buyerId: user.id,
+            buyerName: user.name,
+            quantity: item.quantity,
+            status: 'Awaiting Confirmation',
+            dateOrdered: new Date().toISOString().split('T')[0]
+        };
+
+        if (item.isSerialized) {
+            // Get specific units to lock
+             const availableUnits = allUnits.filter(u => 
+                 u.productId === item.productId && 
+                 u.sellerId === sellerId && 
+                 (u.status === 'AT_SELLER' || u.status === 'RETURNED_TO_SELLER')
+             );
+             
+             // FIFO Strategy: Take the first N available units
+             const unitsToAssign = availableUnits.slice(0, item.quantity);
+             const unitIds = unitsToAssign.map(u => u.id);
+             
+             // Update Units in memory to "SOLD"
+             allUnits = allUnits.map(u => {
+                 if (unitIds.includes(u.id)) {
+                     return { 
+                         ...u, 
+                         status: 'SOLD_TO_BUYER', 
+                         buyerId: user.id,
+                         dateSold: new Date().toISOString().split('T')[0]
+                     };
+                 }
+                 return u;
+             });
+             
+             newOrder.assignedUnitIds = unitIds;
+        } else {
+            // Update Bulk Stock in memory
+            allStock = allStock.map(s => {
+                if (s.productId === item.productId && s.ownerId === sellerId) {
+                    return { ...s, quantity: s.quantity - item.quantity };
+                }
+                return s;
+            });
+        }
+        newOrders.push(newOrder);
+    }
+
+    // Step D: Commit Phase
+    allOrders = [...allOrders, ...newOrders];
+    
+    // Atomic-like commit to storage
+    localStorage.setItem(UNITS_KEY, JSON.stringify(allUnits));
+    localStorage.setItem(BULK_STOCK_KEY, JSON.stringify(allStock));
+    localStorage.setItem(ORDERS_KEY, JSON.stringify(allOrders));
+    
+    // Clear Cart for User (Satisfying Step D)
+    localStorage.removeItem(CART_KEY_PREFIX + user.id);
+    
+    console.log("Order Process Success: Inventory Updated, Orders Created, Cart Cleared.");
 };
 
 export const fulfillOrder = (orderId: string, unitIds: string[] | null): void => {
   const orders = getOrders();
   const order = orders.find(o => o.id === orderId);
-  const units = getProductUnits();
-
   if (order) {
     order.status = 'Confirmed';
     order.dateConfirmed = new Date().toISOString().split('T')[0];
-    
-    if (unitIds && unitIds.length > 0) {
-        // Serialized Fulfillment
-        order.assignedUnitIds = unitIds;
-        unitIds.forEach(uid => {
-          const u = units.find(unit => unit.id === uid);
-          if (u) {
-            u.status = 'SOLD_TO_BUYER';
-            u.buyerId = order.buyerId;
-            u.dateSold = new Date().toISOString().split('T')[0];
-          }
-        });
-        localStorage.setItem(UNITS_KEY, JSON.stringify(units));
-    } else {
-        // Bulk Fulfillment - Deduct Stock
-        transferBulkStock(order.productId, order.sellerId, null, order.quantity);
+    if (unitIds && (!order.assignedUnitIds || order.assignedUnitIds.length === 0)) {
+         const units = getProductUnits();
+         order.assignedUnitIds = unitIds;
+         unitIds.forEach(uid => {
+            const u = units.find(unit => unit.id === uid);
+            if (u) {
+                u.status = 'SOLD_TO_BUYER';
+                u.buyerId = order.buyerId;
+                u.dateSold = new Date().toISOString().split('T')[0];
+            }
+         });
+         localStorage.setItem(UNITS_KEY, JSON.stringify(units));
     }
-    
     localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
   }
 };
@@ -484,10 +729,35 @@ export const fulfillOrder = (orderId: string, unitIds: string[] | null): void =>
 export const cancelOrder = (orderId: string): void => {
   const orders = getOrders();
   const orderIndex = orders.findIndex(o => o.id === orderId);
-  
-  if (orderIndex >= 0) {
-    orders.splice(orderIndex, 1);
-    localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
+  const order = orders[orderIndex];
+  if (order) {
+      if (order.assignedUnitIds && order.assignedUnitIds.length > 0) {
+          const units = getProductUnits();
+          order.assignedUnitIds.forEach(uid => {
+              const u = units.find(unit => unit.id === uid);
+              if (u) {
+                  u.status = 'AT_SELLER'; 
+                  u.buyerId = undefined;
+                  u.dateSold = undefined;
+              }
+          });
+          localStorage.setItem(UNITS_KEY, JSON.stringify(units));
+      } else {
+          const allStock = getBulkStock();
+          const stock = allStock.find(s => s.productId === order.productId && s.ownerId === order.sellerId);
+          if (stock) stock.quantity += order.quantity;
+          else {
+              allStock.push({
+                  id: generateId(),
+                  productId: order.productId,
+                  ownerId: order.sellerId,
+                  quantity: order.quantity
+              });
+          }
+          localStorage.setItem(BULK_STOCK_KEY, JSON.stringify(allStock));
+      }
+      orders.splice(orderIndex, 1);
+      localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
   }
 };
 

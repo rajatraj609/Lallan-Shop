@@ -1,8 +1,11 @@
 export enum UserRole {
   MANUFACTURER = 'Manufacturer',
   SELLER = 'Seller',
-  BUYER = 'Buyer'
+  BUYER = 'Buyer',
+  ADMIN = 'Admin'
 }
+
+export type UserStatus = 'Pending' | 'Approved' | 'Rejected';
 
 export interface User {
   id: string;
@@ -14,6 +17,24 @@ export interface User {
   phone?: string;
   phoneCode?: string;
   profileImage?: string; // Base64 encoded image
+  
+  // Moderation
+  status?: UserStatus;
+  isBanned?: boolean;
+  rejectionReason?: string;
+}
+
+export interface Message {
+  id: string;
+  senderId: string;
+  senderName: string;
+  receiverId: string; // Could be 'ADMIN' generic or specific ID
+  receiverName: string;
+  text: string;
+  timestamp: string;
+  isRead: boolean;
+  isClosed?: boolean; // For "End Discussion"
+  attachmentUrl?: string; // For screenshots (base64)
 }
 
 export type UnitStatus = 
@@ -99,4 +120,10 @@ export interface PasswordScore {
   score: number;
   label: string;
   color: string;
+}
+
+export interface GlobalSettings {
+  serialRangeStart: number;
+  serialRangeEnd: number;
+  recycledSerials: number[]; // Numbers that were deleted and can be reused
 }

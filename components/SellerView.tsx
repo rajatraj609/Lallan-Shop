@@ -16,6 +16,7 @@ const SellerView: React.FC<Props> = ({ user }) => {
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const [availableOrderUnits, setAvailableOrderUnits] = useState<ProductUnit[]>([]);
   const [selectedFulfillIds, setSelectedFulfillIds] = useState<Set<string>>(new Set());
+  const [isAutoAssigned, setIsAutoAssigned] = useState(false);
 
   // Returns / Defectives State
   const [defectiveUnits, setDefectiveUnits] = useState<ProductUnit[]>([]);
@@ -43,6 +44,19 @@ const SellerView: React.FC<Props> = ({ user }) => {
   const openFulfillmentModal = (order: Order) => {
     const product = products.find(p => p.id === order.productId);
     
+    // Check if units are already assigned (Auto-assignment from Buyer Checkout)
+    if (order.assignedUnitIds && order.assignedUnitIds.length > 0) {
+        setIsAutoAssigned(true);
+        // Pre-select them visually for context
+        const assigned = getProductUnits().filter(u => order.assignedUnitIds?.includes(u.id));
+        setAvailableOrderUnits(assigned);
+        setSelectedFulfillIds(new Set(order.assignedUnitIds));
+        setActiveOrder(order);
+        return;
+    }
+
+    setIsAutoAssigned(false);
+
     // If not serialized (Bulk), we just fulfill immediately/confirm
     if (product && !product.isSerialized) {
         if (confirm(`Confirm bulk shipment of ${order.quantity} units for ${order.productName}?`)) {
@@ -52,7 +66,7 @@ const SellerView: React.FC<Props> = ({ user }) => {
         return;
     }
 
-    // Serialized Logic
+    // Serialized Logic (Legacy or Manual Fallback)
     const units = getAvailableSerialNumbers(order.productId, 'AT_SELLER', 'sellerId', user.id);
     setAvailableOrderUnits(units);
     setSelectedFulfillIds(new Set());
@@ -60,6 +74,8 @@ const SellerView: React.FC<Props> = ({ user }) => {
   };
 
   const toggleFulfillSelection = (unitId: string) => {
+    if (isAutoAssigned) return; // Cannot change selection if auto-assigned
+
     const newSet = new Set(selectedFulfillIds);
     if (newSet.has(unitId)) {
         newSet.delete(unitId);
@@ -357,21 +373,31 @@ const SellerView: React.FC<Props> = ({ user }) => {
               <div className="p-6 border-b border-white/5 bg-white/5 flex justify-between items-center">
                  <div>
                     <h2 className="text-lg font-display font-bold text-white">Fulfill Order #{activeOrder.id.substring(0,4)}</h2>
-                    <p className="text-xs text-neutral-400 mt-1">Select <span className="text-white font-bold">{activeOrder.quantity}</span> serial numbers to ship.</p>
+                    <p className="text-xs text-neutral-400 mt-1">
+                        {isAutoAssigned 
+                           ? <span className="text-emerald-400 font-bold">Units already reserved by Checkout.</span>
+                           : <>Select <span className="text-white font-bold">{activeOrder.quantity}</span> serial numbers to ship.</>
+                        }
+                    </p>
                  </div>
                  <button onClick={() => setActiveOrder(null)} className="text-neutral-500 hover:text-white">Close</button>
               </div>
 
               <div className="flex-1 overflow-y-auto p-6 bg-neutral-900">
-                  {availableOrderUnits.length < activeOrder.quantity ? (
+                  {availableOrderUnits.length < activeOrder.quantity && !isAutoAssigned ? (
                      <div className="p-4 bg-red-900/20 border border-red-500/20 rounded-xl text-center">
                         <p className="text-red-400 text-sm">Insufficient stock. You need {activeOrder.quantity} units but only have {availableOrderUnits.length}.</p>
                      </div>
                   ) : (
                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         {availableOrderUnits.map(unit => {
-                           const isSelected = selectedFulfillIds.has(unit.id);
-                           const isDisabled = !isSelected && selectedFulfillIds.size >= activeOrder.quantity;
+                           // If auto assigned, check against activeOrder
+                           const isSelected = isAutoAssigned 
+                                ? true 
+                                : selectedFulfillIds.has(unit.id);
+                           const isDisabled = isAutoAssigned 
+                                ? true 
+                                : (!isSelected && selectedFulfillIds.size >= activeOrder.quantity);
                            
                            return (
                              <button
@@ -400,11 +426,13 @@ const SellerView: React.FC<Props> = ({ user }) => {
 
               <div className="p-6 border-t border-white/5 bg-neutral-900 flex justify-between items-center">
                  <div className="text-sm text-neutral-400">
-                    Selected: <span className={selectedFulfillIds.size === activeOrder.quantity ? "text-emerald-400 font-bold" : "text-white"}>{selectedFulfillIds.size}</span> / {activeOrder.quantity}
+                    Selected: <span className={selectedFulfillIds.size === activeOrder.quantity || isAutoAssigned ? "text-emerald-400 font-bold" : "text-white"}>
+                        {isAutoAssigned ? activeOrder.quantity : selectedFulfillIds.size}
+                    </span> / {activeOrder.quantity}
                  </div>
                  <button 
                    onClick={handleConfirmFulfillment}
-                   disabled={selectedFulfillIds.size !== activeOrder.quantity}
+                   disabled={!isAutoAssigned && selectedFulfillIds.size !== activeOrder.quantity}
                    className="px-6 py-3 bg-white disabled:bg-neutral-800 disabled:text-neutral-500 text-black font-bold rounded-xl transition-colors"
                  >
                     Confirm & Ship

@@ -8,9 +8,10 @@ interface Props {
   onRemoveItem: (id: string) => void;
   onCheckout: () => void;
   isManufacturer?: boolean;
+  isProcessing?: boolean;
 }
 
-const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemoveItem, onCheckout, isManufacturer }) => {
+const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemoveItem, onCheckout, isManufacturer, isProcessing = false }) => {
   // Handle Escape key to close the drawer
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -37,7 +38,7 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemoveItem,
       e.stopPropagation();
       e.preventDefault();
     }
-    onClose();
+    if (!isProcessing) onClose();
   };
 
   if (!isOpen) return null;
@@ -46,10 +47,7 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemoveItem,
 
   return (
     <div className="relative z-[9999]">
-      {/* Overlay / Backdrop 
-          High z-index to cover everything. 
-          Added cursor-pointer to indicate it's clickable.
-      */}
+      {/* Overlay / Backdrop */}
       <div 
         className="fixed inset-0 bg-neutral-950/90 backdrop-blur-sm z-[9998] animate-in fade-in duration-300 cursor-pointer" 
         onClick={handleClose}
@@ -57,22 +55,20 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemoveItem,
         title="Click outside to close"
       ></div>
       
-      {/* Drawer Panel 
-          Fixed to right, high z-index.
-      */}
+      {/* Drawer Panel */}
       <div className="fixed inset-y-0 right-0 w-full max-w-md bg-neutral-900 border-l border-white/10 z-[9999] shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 transform transition-transform">
          
-         {/* Fixed Header area to ensure button is always accessible */}
+         {/* Fixed Header */}
          <div className="p-6 border-b border-white/5 bg-neutral-900 sticky top-0 z-[10000] flex items-center justify-between select-none shadow-md">
             <div className="flex items-center">
                 <button 
-                    onClick={handleClose}
-                    className="group flex items-center gap-3 text-neutral-400 hover:text-white transition-colors focus:outline-none py-2 px-1 rounded-md active:scale-95 z-[10001] cursor-pointer"
+                    onClick={() => !isProcessing && onClose()}
+                    className={`group flex items-center gap-3 text-neutral-400 hover:text-white transition-colors focus:outline-none py-2 px-1 rounded-md active:scale-95 z-[10001] cursor-pointer ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
                     aria-label="Go Back"
                     title="Close Cart (Esc)"
                     type="button"
+                    disabled={isProcessing}
                 >
-                    {/* Minimalist Left Arrow Icon */}
                     <div className="p-1 rounded-full bg-white/5 group-hover:bg-white/10 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 group-hover:-translate-x-1 transition-transform">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
@@ -96,7 +92,7 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemoveItem,
                       </svg>
                   </div>
                   <p className="font-medium">Your cart is empty.</p>
-                  <button onClick={handleClose} className="text-xs text-neutral-400 hover:text-white underline decoration-neutral-700 underline-offset-4">
+                  <button onClick={() => onClose()} className="text-xs text-neutral-400 hover:text-white underline decoration-neutral-700 underline-offset-4">
                       Continue Browsing
                   </button>
                </div>
@@ -129,9 +125,10 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemoveItem,
 
                       {/* Remove Button Absolute */}
                       <button 
-                        onClick={() => onRemoveItem(item.id)} 
-                        className="absolute top-2 right-2 p-1.5 text-neutral-600 hover:text-red-400 hover:bg-white/5 rounded-lg transition-colors z-10"
+                        onClick={() => !isProcessing && onRemoveItem(item.id)} 
+                        className={`absolute top-2 right-2 p-1.5 text-neutral-600 hover:text-red-400 hover:bg-white/5 rounded-lg transition-colors z-10 ${isProcessing ? 'hidden' : ''}`}
                         title="Remove Item"
+                        disabled={isProcessing}
                       >
                           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
@@ -150,10 +147,19 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemoveItem,
              </div>
              <button 
                 onClick={onCheckout}
-                disabled={cartItems.length === 0}
-                className="w-full py-4 bg-white disabled:bg-neutral-800 disabled:text-neutral-500 text-black font-display font-bold rounded-xl hover:bg-neutral-200 transition-colors shadow-lg"
+                disabled={cartItems.length === 0 || isProcessing}
+                className={`w-full py-4 bg-white text-black font-display font-bold rounded-xl hover:bg-neutral-200 transition-all shadow-lg flex items-center justify-center gap-3 ${
+                   isProcessing ? 'opacity-80 cursor-wait' : ''
+                } disabled:bg-neutral-800 disabled:text-neutral-500 disabled:cursor-not-allowed`}
              >
-                {isManufacturer ? 'Select Recipient & Dispatch' : 'Place Order'}
+                {isProcessing ? (
+                    <>
+                       <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+                       <span>Processing...</span>
+                    </>
+                ) : (
+                    isManufacturer ? 'Select Recipient & Dispatch' : 'Place Order'
+                )}
              </button>
          </div>
       </div>
