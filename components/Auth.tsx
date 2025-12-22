@@ -40,6 +40,9 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
   const [activeInfoModal, setActiveInfoModal] = useState<{title: string, content: string} | null>(null);
   const [siteSettings, setSiteSettings] = useState<GlobalSettings | null>(null);
 
+  // Mobile Menu State
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   useEffect(() => {
     // Load settings on mount
     const settings = getGlobalSettings();
@@ -269,11 +272,24 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
              <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-black font-bold text-xl shadow-[0_0_15px_rgba(255,255,255,0.2)]">L</div>
              <span className="text-xl font-display font-bold tracking-tight text-white">Lallan Shop</span>
           </div>
+          
+          {/* Desktop Nav */}
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-neutral-400">
              <button onClick={() => handleInfoClick('how')} className="hover:text-white transition-colors">How it works</button>
              <button onClick={() => handleInfoClick('story')} className="hover:text-white transition-colors">Our Story</button>
              <button onClick={() => handleInfoClick('support')} className="hover:text-white transition-colors">Support</button>
           </div>
+
+          {/* Mobile Menu Button */}
+          <button 
+             onClick={() => setIsMobileMenuOpen(true)}
+             className="md:hidden p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
+             aria-label="Open Menu"
+          >
+             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+             </svg>
+          </button>
       </header>
 
       {/* --- Main Content --- */}
@@ -540,6 +556,51 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
              </div>
           </div>
       </footer>
+
+      {/* MOBILE MENU DRAWER */}
+      {isMobileMenuOpen && (
+         <div className="fixed inset-0 z-[60] flex justify-end">
+             {/* Backdrop */}
+             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsMobileMenuOpen(false)}></div>
+             
+             {/* Drawer */}
+             <div className="relative w-72 h-full bg-neutral-900 border-l border-white/10 shadow-2xl p-6 flex flex-col animate-in slide-in-from-right duration-300">
+                 <div className="flex justify-end mb-8">
+                     <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 text-neutral-500 hover:text-white">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                     </button>
+                 </div>
+
+                 <div className="flex flex-col gap-6 text-lg font-display font-medium text-neutral-300">
+                     <button onClick={() => { handleInfoClick('how'); setIsMobileMenuOpen(false); }} className="text-left hover:text-white transition-colors">How it works</button>
+                     <button onClick={() => { handleInfoClick('story'); setIsMobileMenuOpen(false); }} className="text-left hover:text-white transition-colors">Our Story</button>
+                     <button onClick={() => { handleInfoClick('support'); setIsMobileMenuOpen(false); }} className="text-left hover:text-white transition-colors">Support</button>
+                     <div className="h-px bg-white/10 my-2"></div>
+                     <button onClick={() => { handleInfoClick('privacy'); setIsMobileMenuOpen(false); }} className="text-left text-sm text-neutral-500 hover:text-white transition-colors">Privacy Policy</button>
+                     <button onClick={() => { handleInfoClick('terms'); setIsMobileMenuOpen(false); }} className="text-left text-sm text-neutral-500 hover:text-white transition-colors">Terms of Service</button>
+                 </div>
+
+                 {/* Rotating System Messages in Drawer */}
+                 {systemMessages.length > 0 && (
+                     <div className="mt-auto pt-8 border-t border-white/10">
+                        <p className="text-[10px] text-neutral-500 uppercase tracking-widest mb-3 font-bold">Announcements</p>
+                        <div className="min-h-[60px] flex items-center bg-black/30 p-4 rounded-xl border border-white/5">
+                             <p className="text-sm text-white italic animate-in fade-in" key={activeMsgIndex}>
+                                "{systemMessages[activeMsgIndex]}"
+                             </p>
+                        </div>
+                        <div className="flex gap-2 mt-3 justify-center">
+                             {systemMessages.map((_, idx) => (
+                                 <div key={idx} className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${idx === activeMsgIndex ? 'bg-white scale-125' : 'bg-neutral-700'}`} />
+                             ))}
+                        </div>
+                     </div>
+                 )}
+             </div>
+         </div>
+      )}
 
       {/* INFO POPUP MODAL */}
       {activeInfoModal && (
