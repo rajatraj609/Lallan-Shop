@@ -18,6 +18,49 @@ export const generateId = (): string => {
   return Date.now().toString(36) + Math.random().toString(36).substring(2);
 };
 
+// --- QR Security Logic (Synchronous for UI rendering) ---
+
+// Simple hashing function for demo purposes (MurmurHash3-like)
+// In a real production app, this would be a backend signed JWT or HMAC
+const generateSyncSignature = (str: string): string => {
+    let h = 0xdeadbeef;
+    for(let i = 0; i < str.length; i++)
+        h = Math.imul(h ^ str.charCodeAt(i), 2654435761);
+    return ((h ^ h >>> 16) >>> 0).toString(16);
+};
+
+export const getSignedQRData = (serialNumber: string): string => {
+    // Format: LS:{SerialNumber}:{Signature}
+    // LS stands for Lallan Shop (Protocol Prefix)
+    const signature = generateSyncSignature(serialNumber + SYSTEM_SECRET_KEY);
+    return `LS:${serialNumber}:${signature}`;
+};
+
+export const validateSignedQR = (scannedText: string): { valid: boolean, serialNumber?: string, error?: string } => {
+    // 1. Check Format
+    if (!scannedText.startsWith('LS:')) {
+        return { valid: false, error: 'External QR Code Detected. Please scan a genuine Lallan Shop QR.' };
+    }
+
+    const parts = scannedText.split(':');
+    if (parts.length !== 3) {
+        return { valid: false, error: 'Malformed QR Data.' };
+    }
+
+    const serialNumber = parts[1];
+    const scannedSignature = parts[2];
+
+    // 2. Verify Signature
+    const expectedSignature = generateSyncSignature(serialNumber + SYSTEM_SECRET_KEY);
+
+    if (scannedSignature !== expectedSignature) {
+        return { valid: false, error: 'Forged QR Code. Signature verification failed.' };
+    }
+
+    return { valid: true, serialNumber };
+};
+
+
 // --- Global Settings & Serial Logic ---
 
 export const getGlobalSettings = (): GlobalSettings => {

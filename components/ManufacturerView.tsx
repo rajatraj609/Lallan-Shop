@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Product, UserRole, ProductUnit, CartItem } from '../types';
-import { getUsersByRole, saveProductBatch, getProducts, getAvailableSerialNumbers, updateProductUnits, generateId, getManufacturerDispatchHistory, deleteProductUnit, deleteProduct, getProductUnits, transferBulkStock, addToCart, getCart, removeFromCart, clearCart, getBulkStock, generateNextSerialBatch } from '../services/storage';
+import { getUsersByRole, saveProductBatch, getProducts, getAvailableSerialNumbers, updateProductUnits, generateId, getManufacturerDispatchHistory, deleteProductUnit, deleteProduct, getProductUnits, transferBulkStock, addToCart, getCart, removeFromCart, clearCart, getBulkStock, generateNextSerialBatch, getSignedQRData } from '../services/storage';
 import CartDrawer from './CartDrawer';
 
 interface Props {
@@ -66,7 +66,8 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
   // Image Handling
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files.length > 0) {
-          const files = Array.from(e.target.files);
+          // Explicitly cast to File[] to avoid 'unknown' type inference in some TS environments
+          const files = Array.from(e.target.files) as File[];
           const remainingSlots = 5 - productImages.length;
           const filesToProcess = files.slice(0, remainingSlots);
           
@@ -605,9 +606,9 @@ const ManufacturerView: React.FC<Props> = ({ user }) => {
                                                          <p className="text-[10px] text-neutral-500 uppercase mt-1">Status: {unit.status.replace(/_/g, ' ')}</p>
                                                      </div>
                                                      <div className="bg-white p-1 rounded-sm">
-                                                        {/* QR Code simulating a link to verify */}
+                                                        {/* QR Code simulating a link to verify - UPDATED TO USE SIGNED DATA */}
                                                         <img 
-                                                            src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${unit.serialNumber}`} 
+                                                            src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(getSignedQRData(unit.serialNumber))}`} 
                                                             alt="QR" 
                                                             className="w-12 h-12"
                                                         />

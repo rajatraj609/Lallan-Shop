@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { verifyProductIdentity, getProducts, getProductStockForOwner, getUsersByRole } from '../services/storage';
+import { verifyProductIdentity, getProducts, getProductStockForOwner, getUsersByRole, validateSignedQR } from '../services/storage';
 import { UserRole } from '../types';
 import { Html5Qrcode } from 'html5-qrcode';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -169,11 +169,26 @@ const AskeChatbot: React.FC = () => {
       if (navigator.vibrate) navigator.vibrate(200);
       stopScanner();
       
+      // NEW VALIDATION LOGIC
+      const validation = validateSignedQR(decodedText);
+
+      if (!validation.valid) {
+          setVerifyStep('fail');
+          setVerifyMessages(prev => [...prev, { sender: 'user', text: "[Scanned QR]" }]);
+          setTimeout(() => {
+              setVerifyMessages(prev => [...prev, { sender: 'bot', text: `SECURITY ALERT: ${validation.error}` }]);
+          }, 500);
+          return;
+      }
+
+      // If valid, extract clean serial number
+      const cleanSerial = validation.serialNumber!;
+      
       setVerifyStep('verifying');
-      setVerifyMessages(prev => [...prev, { sender: 'user', text: `[Scanned]: ${decodedText}` }]);
+      setVerifyMessages(prev => [...prev, { sender: 'user', text: `[Scanned ID]: ${cleanSerial}` }]);
       
       setTimeout(() => {
-          verifyProcess(decodedText);
+          verifyProcess(cleanSerial);
       }, 800);
   };
 
